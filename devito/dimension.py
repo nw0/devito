@@ -12,8 +12,10 @@ class Dimension(sympy.Symbol, DimensionArgProvider):
     is_Space = False
     is_Time = False
 
+    is_Derived = False
     is_Stepping = False
     is_Lowered = False
+    is_SubSampled = False
 
     """Index object that represents a problem dimension and thus
     defines a potential iteration space.
@@ -100,24 +102,13 @@ class TimeDimension(Dimension):
     :param spacing: Optional, symbol for the spacing along this dimension.
     """
 
-
-class SteppingDimension(Dimension):
-
-    is_Stepping = True
-
-    """
-    Dimension symbol that defines the stepping direction of an
-    :class:`Operator` and implies modulo buffered iteration. This is most
-    commonly use to represent a timestepping dimension.
-
-    :param parent: Parent dimension over which to loop in modulo fashion.
-    """
-
+class DerivedDimension(Dimension):
+    is_Derived = True
+    
     def __new__(cls, name, parent, **kwargs):
         newobj = sympy.Symbol.__new__(cls, name)
         assert isinstance(parent, Dimension)
         newobj.parent = parent
-        newobj.modulo = kwargs.get('modulo', 2)
 
         # Inherit time/space identifiers
         cls.is_Time = parent.is_Time
@@ -132,6 +123,43 @@ class SteppingDimension(Dimension):
     @property
     def spacing(self):
         return self.parent.spacing
+
+    
+class SteppingDimension(DerivedDimension):
+    """
+    Dimension symbol that defines the stepping direction of an
+    :class:`Operator` and implies modulo buffered iteration. This is most
+    commonly use to represent a timestepping dimension.
+
+    :param parent: Parent dimension over which to loop in modulo fashion.
+    """
+    is_Stepping = True
+    def __new__(cls, name, parent, **kwargs):
+        newobj = sympy.Symbol.__new__(cls, name)
+        newobj.modulo = kwargs.get('modulo', 2)
+        return newobj
+
+
+class SubsampledDimension(Dimension):
+    is_SubSampled = True
+
+    """
+    Dimension symbol that defines an iteration that proceeds with an increment
+    of more than 1.
+    """
+
+    def __new__(cls, name, parent, **kwargs):
+        newobj = sympy.Symbol.__new__(cls, name)
+        assert isinstance(parent, Dimension)
+        newobj.parent = parent
+        newobj.factor = kwargs.get('factor', 4)
+
+        # Inherit time/space identifiers
+        cls.is_Time = parent.is_Time
+        cls.is_Space = parent.is_Space
+
+        return newobj
+    
 
 
 class LoweredDimension(Dimension):
