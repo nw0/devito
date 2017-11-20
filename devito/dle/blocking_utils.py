@@ -3,10 +3,10 @@ from sympy import Symbol
 
 from devito.cgen_utils import ccode
 from devito.dle import compose_nodes, is_foldable, retrieve_iteration_tree
-from devito.dse import xreplace_indices
-from devito.nodes import Expression, Iteration, List, UnboundedIndex, ntags
-from devito.visitors import (FindAdjacentIterations, FindNodes, IsPerfectIteration,
-                             NestedTransformer, Transformer)
+from devito.ir.iet import (Expression, Iteration, List, UnboundedIndex, ntags,
+                           FindAdjacentIterations, FindNodes, IsPerfectIteration,
+                           NestedTransformer, Transformer)
+from devito.symbolics import as_symbol, xreplace_indices
 from devito.tools import as_tuple
 
 __all__ = ['fold_blockable_tree', 'unfold_blocked_tree']
@@ -40,9 +40,13 @@ def fold_blockable_tree(node, exclude_innermost=False):
             pairwise_folds = list(zip(*reversed(trees)))
             if any(not is_foldable(j) for j in pairwise_folds):
                 continue
-            # Perform folding
+            # Maybe heuristically exclude innermost Iteration
             if exclude_innermost is True:
                 pairwise_folds = pairwise_folds[:-1]
+            # Perhaps there's nothing to fold
+            if len(pairwise_folds) == 1:
+                continue
+            # Perform folding
             for j in pairwise_folds:
                 root, remainder = j[0], j[1:]
                 folds = [(tuple(y-x for x, y in zip(i.offsets, root.offsets)), i.nodes)
@@ -163,8 +167,8 @@ def optimize_unfolded_tree(unfolded, root):
         if all(not j.is_Remainder for j in modified_tree):
             shape = tuple(j.bounds_symbolic[1] for j in modified_tree)
             for j in exprs:
-                j_shape = shape + j.output_function.shape[len(modified_tree):]
-                j.output_function.update(shape=j_shape, onstack=True)
+                j_shape = shape + j.write.shape[len(modified_tree):]
+                j.write.update(shape=j_shape, onstack=True)
 
         # Substitute iteration variables within the folded trees
         modified_tree = compose_nodes(modified_tree)
@@ -175,7 +179,7 @@ def optimize_unfolded_tree(unfolded, root):
         # Introduce the new iteration variables within /root/
         modified_root = compose_nodes(modified_root)
         exprs = FindNodes(Expression).visit(modified_root)
-        candidates = [j.output for j in subs]
+        candidates = [as_symbol(j.output) for j in subs]
         replaced = xreplace_indices([j.expr for j in exprs], mapper, candidates)
         subs = [j._rebuild(expr=k) for j, k in zip(exprs, replaced)]
         root = Transformer(dict(zip(exprs, subs))).visit(modified_root)

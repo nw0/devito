@@ -1,16 +1,18 @@
 import numpy as np
 import pytest
 from numpy import linalg
+from conftest import skipif_yask
 
 from devito.logger import info
 from examples.seismic.acoustic.acoustic_example import smooth10, acoustic_setup as setup
 from examples.seismic import Receiver
 
 
+@skipif_yask
 @pytest.mark.parametrize('space_order', [4])
 @pytest.mark.parametrize('time_order', [2])
-@pytest.mark.parametrize('dimensions', [(70, 80)])
-def test_gradientFWI(dimensions, time_order, space_order):
+@pytest.mark.parametrize('shape', [(70, 80)])
+def test_gradientFWI(shape, time_order, space_order):
     """
     This test ensure that the FWI gradient computed with devito
     satisfies the Taylor expansion property:
@@ -31,8 +33,8 @@ def test_gradientFWI(dimensions, time_order, space_order):
     :param space_order: order of the spacial discretization scheme
     :return: assertion that the Taylor properties are satisfied
     """
-    spacing = tuple(15. for _ in dimensions)
-    wave = setup(dimensions=dimensions, spacing=spacing,
+    spacing = tuple(15. for _ in shape)
+    wave = setup(shape=shape, spacing=spacing,
                  time_order=time_order, space_order=space_order,
                  nbpml=10+space_order/2)
     m0 = smooth10(wave.model.m.data, wave.model.shape_domain)
@@ -46,7 +48,8 @@ def test_gradientFWI(dimensions, time_order, space_order):
     # Objective function value
     F0 = .5*linalg.norm(rec0.data - rec.data)**2
     # Gradient: <J^T \delta d, dm>
-    residual = Receiver(name='rec', data=rec0.data - rec.data,
+    residual = Receiver(name='rec', grid=wave.model.grid,
+                        data=rec0.data - rec.data,
                         coordinates=rec0.coordinates.data)
     gradient, _ = wave.gradient(residual, u0, m=m0)
     G = np.dot(gradient.data.reshape(-1), dm.reshape(-1))
@@ -74,10 +77,11 @@ def test_gradientFWI(dimensions, time_order, space_order):
     assert np.isclose(p2[0], 2.0, rtol=0.1)
 
 
+@skipif_yask
 @pytest.mark.parametrize('space_order', [4])
 @pytest.mark.parametrize('time_order', [2])
-@pytest.mark.parametrize('dimensions', [(70, 80)])
-def test_gradientJ(dimensions, time_order, space_order):
+@pytest.mark.parametrize('shape', [(70, 80)])
+def test_gradientJ(shape, time_order, space_order):
     """
     This test ensure that the Jacobian computed with devito
     satisfies the Taylor expansion property:
@@ -92,13 +96,13 @@ def test_gradientJ(dimensions, time_order, space_order):
     :param space_order: order of the spacial discretization scheme
     :return: assertion that the Taylor properties are satisfied
     """
-    spacing = tuple(15. for _ in dimensions)
-    wave = setup(dimensions=dimensions, spacing=spacing,
+    spacing = tuple(15. for _ in shape)
+    wave = setup(shape=shape, spacing=spacing,
                  time_order=time_order, space_order=space_order,
                  tn=1000., nbpml=10+space_order/2)
     m0 = smooth10(wave.model.m.data, wave.model.shape_domain)
     dm = np.float32(wave.model.m.data - m0)
-    linrec = Receiver(name='rec', ntime=wave.receiver.nt,
+    linrec = Receiver(name='rec', grid=wave.model.grid, ntime=wave.receiver.nt,
                       coordinates=wave.receiver.coordinates.data)
     # Compute receiver data and full wavefield for the smooth velocity
     rec, u0, _ = wave.forward(m=m0, save=False)
@@ -121,11 +125,12 @@ def test_gradientJ(dimensions, time_order, space_order):
     # Test slope of the  tests
     p1 = np.polyfit(np.log10(H), np.log10(error1), 1)
     p2 = np.polyfit(np.log10(H), np.log10(error2), 1)
-    info('1st order error, Phi(m0+dm)-Phi(m0): %s' % (p1))
-    info('2nd order error, Phi(m0+dm)-Phi(m0) - <J(m0)^T \delta d, dm>: %s' % (p2))
+    info('1st order error, Phi(m0+dm)-Phi(m0) with slope: %s compared to 1' % (p1[0]))
+    info('2nd order error, Phi(m0+dm)-Phi(m0) - <J(m0)^T \delta d, dm>with slope:'
+         ' %s comapred to 2' % (p2[0]))
     assert np.isclose(p1[0], 1.0, rtol=0.1)
     assert np.isclose(p2[0], 2.0, rtol=0.1)
 
 
 if __name__ == "__main__":
-    test_gradientJ(dimensions=(60, 70), time_order=2, space_order=4)
+    test_gradientJ(shape=(60, 70), time_order=2, space_order=4)

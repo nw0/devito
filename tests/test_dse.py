@@ -1,17 +1,16 @@
 from conftest import EVAL
 
+from sympy import sin  # noqa
 import numpy as np
 import pytest
-from sympy import Eq  # noqa
+from conftest import x, y, z, time, skipif_yask  # noqa
 
-from devito.dse import (clusterize, rewrite, xreplace_constrained, iq_timeinvariant,
-                        iq_timevarying, estimate_cost, temporaries_graph,
-                        common_subexprs_elimination, collect)
-from devito import Dimension, x, y, z, time, TimeData, clear_cache  # noqa
-from devito.interfaces import ScalarFunction
-from devito.nodes import Expression
-from devito.stencil import Stencil
-from devito.visitors import FindNodes
+from devito import Eq  # noqa
+from devito.ir import Stencil, Expression, FindNodes, TemporariesGraph, clusterize
+from devito.dse import rewrite, common_subexprs_elimination, collect
+from devito.symbolics import (xreplace_constrained, iq_timeinvariant, iq_timevarying,
+                              estimate_cost, pow_to_mul)
+from devito.types import Scalar
 from examples.seismic.acoustic import AcousticWaveSolver
 from examples.seismic import demo_model, RickerSource, GaborSource, Receiver
 from examples.seismic.tti import AnisotropicWaveSolver
@@ -20,7 +19,7 @@ from examples.seismic.tti import AnisotropicWaveSolver
 # Acoustic
 
 def run_acoustic_forward(dse=None):
-    dimensions = (50, 50, 50)
+    shape = (50, 50, 50)
     spacing = (10., 10., 10.)
     nbpml = 10
     nrec = 101
@@ -28,8 +27,8 @@ def run_acoustic_forward(dse=None):
     tn = 250.0
 
     # Create two-layer model from preset
-    model = demo_model(preset='layers', vp_top=3., vp_bottom=4.5,
-                       spacing=spacing, shape=dimensions, nbpml=nbpml)
+    model = demo_model(preset='layers-isotropic', vp_top=3., vp_bottom=4.5,
+                       spacing=spacing, shape=shape, nbpml=nbpml)
 
     # Derive timestepping from model spacing
     dt = model.critical_dt
@@ -37,12 +36,12 @@ def run_acoustic_forward(dse=None):
     time_values = np.linspace(t0, tn, nt)  # Discretized time axis
 
     # Define source geometry (center of domain, just below surface)
-    src = RickerSource(name='src', ndim=model.dim, f0=0.01, time=time_values)
+    src = RickerSource(name='src', grid=model.grid, f0=0.01, time=time_values)
     src.coordinates.data[0, :] = np.array(model.domain_size) * .5
     src.coordinates.data[0, -1] = 20.
 
     # Define receiver geometry (same as source, but spread across x)
-    rec = Receiver(name='nrec', ntime=nt, npoint=nrec, ndim=model.dim)
+    rec = Receiver(name='nrec', grid=model.grid, ntime=nt, npoint=nrec)
     rec.coordinates.data[:, 0] = np.linspace(0., model.domain_size[0], num=nrec)
     rec.coordinates.data[:, 1:] = src.coordinates.data[0, 1:]
 
@@ -52,6 +51,7 @@ def run_acoustic_forward(dse=None):
     return u, rec
 
 
+@skipif_yask
 def test_acoustic_rewrite_basic():
     ret1 = run_acoustic_forward(dse=None)
     ret2 = run_acoustic_forward(dse='basic')
@@ -62,39 +62,36 @@ def test_acoustic_rewrite_basic():
 
 # TTI
 
-def tti_operator(dse=False):
+def tti_operator(dse=False, space_order=4):
     nrec = 101
     t0 = 0.0
     tn = 250.
     nbpml = 10
-    dimensions = (50, 50, 50)
+    shape = (50, 50, 50)
     spacing = (20., 20., 20.)
 
     # Two layer model for true velocity
-    model = demo_model('layers', ratio=3, nbpml=nbpml,
-                       shape=dimensions, spacing=spacing,
-                       epsilon=.4*np.ones(dimensions),
-                       delta=-.1*np.ones(dimensions),
-                       theta=-np.pi/7*np.ones(dimensions),
-                       phi=np.pi/5*np.ones(dimensions))
+    model = demo_model('layers-tti', ratio=3, nbpml=nbpml,
+                       shape=shape, spacing=spacing)
 
+    # Derive timestepping from model spacing
     # Derive timestepping from model spacing
     dt = model.critical_dt
     nt = int(1 + (tn-t0) / dt)  # Number of timesteps
     time_values = np.linspace(t0, tn, nt)  # Discretized time axis
 
     # Define source geometry (center of domain, just below surface)
-    src = GaborSource(name='src', ndim=model.dim, f0=0.01, time=time_values)
+    src = GaborSource(name='src', grid=model.grid, f0=0.01, time=time_values)
     src.coordinates.data[0, :] = np.array(model.domain_size) * .5
     src.coordinates.data[0, -1] = model.origin[-1] + 2 * spacing[-1]
 
     # Define receiver geometry (spread across x, lust below surface)
-    rec = Receiver(name='nrec', ntime=nt, npoint=nrec, ndim=model.dim)
+    rec = Receiver(name='nrec', grid=model.grid, ntime=nt, npoint=nrec)
     rec.coordinates.data[:, 0] = np.linspace(0., model.domain_size[0], num=nrec)
     rec.coordinates.data[:, 1:] = src.coordinates.data[0, 1:]
 
     return AnisotropicWaveSolver(model, source=src, receiver=rec,
-                                 time_order=2, space_order=4, dse=dse)
+                                 time_order=2, space_order=space_order, dse=dse)
 
 
 @pytest.fixture(scope="session")
@@ -104,13 +101,14 @@ def tti_nodse():
     return v, rec
 
 
+@skipif_yask
 def test_tti_clusters_to_graph():
     solver = tti_operator()
 
-    nodes = FindNodes(Expression).visit(solver.op_fwd.elemental_functions +
-                                        (solver.op_fwd,))
+    nodes = FindNodes(Expression).visit(solver.op_fwd('centered').elemental_functions +
+                                        (solver.op_fwd('centered'),))
     expressions = [n.expr for n in nodes]
-    stencils = solver.op_fwd._retrieve_stencils(expressions)
+    stencils = solver.op_fwd('centered')._retrieve_stencils(expressions)
     clusters = clusterize(expressions, stencils)
     assert len(clusters) == 3
 
@@ -126,6 +124,7 @@ def test_tti_clusters_to_graph():
     assert all(v.reads or v.readby for v in graph.values())
 
 
+@skipif_yask
 def test_tti_rewrite_basic(tti_nodse):
     operator = tti_operator(dse='basic')
     rec, u, v, _ = operator.forward()
@@ -134,6 +133,7 @@ def test_tti_rewrite_basic(tti_nodse):
     assert np.allclose(tti_nodse[1].data, rec.data, atol=10e-3)
 
 
+@skipif_yask
 def test_tti_rewrite_advanced(tti_nodse):
     operator = tti_operator(dse='advanced')
     rec, u, v, _ = operator.forward()
@@ -142,6 +142,7 @@ def test_tti_rewrite_advanced(tti_nodse):
     assert np.allclose(tti_nodse[1].data, rec.data, atol=10e-1)
 
 
+@skipif_yask
 def test_tti_rewrite_speculative(tti_nodse):
     operator = tti_operator(dse='speculative')
     rec, u, v, _ = operator.forward()
@@ -150,6 +151,7 @@ def test_tti_rewrite_speculative(tti_nodse):
     assert np.allclose(tti_nodse[1].data, rec.data, atol=10e-1)
 
 
+@skipif_yask
 def test_tti_rewrite_aggressive(tti_nodse):
     operator = tti_operator(dse='aggressive')
     rec, u, v, _ = operator.forward()
@@ -158,8 +160,20 @@ def test_tti_rewrite_aggressive(tti_nodse):
     assert np.allclose(tti_nodse[1].data, rec.data, atol=10e-1)
 
 
+@skipif_yask
+@pytest.mark.parametrize('kernel,space_order,expected', [
+    ('shifted', 8, 355), ('shifted', 16, 811),
+    ('centered', 8, 168), ('centered', 16, 300)
+])
+def test_tti_rewrite_aggressive_opcounts(kernel, space_order, expected):
+    operator = tti_operator(dse='aggressive', space_order=space_order)
+    _, _, _, summary = operator.forward(kernel=kernel, save=False)
+    assert summary['main'].ops == expected
+
+
 # DSE manipulation
 
+@skipif_yask
 @pytest.mark.parametrize('exprs,expected', [
     # simple
     (['Eq(ti1, 4.)', 'Eq(ti0, 3.)', 'Eq(tu, ti0 + ti1 + 5.)'],
@@ -176,14 +190,15 @@ def test_tti_rewrite_aggressive(tti_nodse):
 def test_xreplace_constrained_time_invariants(tu, tv, tw, ti0, ti1, t0, t1,
                                               exprs, expected):
     exprs = EVAL(exprs, tu, tv, tw, ti0, ti1, t0, t1)
-    make = lambda i: ScalarFunction(name='r%d' % i).indexify()
+    make = lambda i: Scalar(name='r%d' % i).indexify()
     processed, found = xreplace_constrained(exprs, make,
-                                            iq_timeinvariant(temporaries_graph(exprs)),
+                                            iq_timeinvariant(TemporariesGraph(exprs)),
                                             lambda i: estimate_cost(i) > 0)
     assert len(found) == len(expected)
     assert all(str(i.rhs) == j for i, j in zip(found, expected))
 
 
+@skipif_yask
 @pytest.mark.parametrize('exprs,expected', [
     # simple
     (['Eq(ti0, 3.)', 'Eq(tv, 2.4)', 'Eq(tu, tv + 5. + ti0)'],
@@ -201,14 +216,15 @@ def test_xreplace_constrained_time_invariants(tu, tv, tw, ti0, ti1, t0, t1,
 def test_xreplace_constrained_time_varying(tu, tv, tw, ti0, ti1, t0, t1,
                                            exprs, expected):
     exprs = EVAL(exprs, tu, tv, tw, ti0, ti1, t0, t1)
-    make = lambda i: ScalarFunction(name='r%d' % i).indexify()
+    make = lambda i: Scalar(name='r%d' % i).indexify()
     processed, found = xreplace_constrained(exprs, make,
-                                            iq_timevarying(temporaries_graph(exprs)),
+                                            iq_timevarying(TemporariesGraph(exprs)),
                                             lambda i: estimate_cost(i) > 0)
     assert len(found) == len(expected)
     assert all(str(i.rhs) == j for i, j in zip(found, expected))
 
 
+@skipif_yask
 @pytest.mark.parametrize('exprs,expected', [
     # simple
     (['Eq(tu, (tv + tw + 5.)*(ti0 + ti1) + (t0 + t1)*(ti0 + ti1))'],
@@ -222,13 +238,14 @@ def test_xreplace_constrained_time_varying(tu, tv, tw, ti0, ti1, t0, t1,
                        ['ti0*ti1', 'r0', 'r0*t0', 'r0*t0*t1'])),
 ])
 def test_common_subexprs_elimination(tu, tv, tw, ti0, ti1, t0, t1, exprs, expected):
-    make = lambda i: ScalarFunction(name='r%d' % i).indexify()
+    make = lambda i: Scalar(name='r%d' % i).indexify()
     processed = common_subexprs_elimination(EVAL(exprs, tu, tv, tw, ti0, ti1, t0, t1),
                                             make)
     assert len(processed) == len(expected)
     assert all(str(i.rhs) == j for i, j in zip(processed, expected))
 
 
+@skipif_yask
 @pytest.mark.parametrize('exprs,expected', [
     (['Eq(t0, 3.)', 'Eq(t1, 7.)', 'Eq(ti0, t0*3. + 2.)', 'Eq(ti1, t1 + t0 + 1.5)',
       'Eq(tv, (ti0 + ti1)*t0)', 'Eq(tw, (ti0 + ti1)*t1)',
@@ -237,12 +254,13 @@ def test_common_subexprs_elimination(tu, tv, tw, ti0, ti1, t0, t1, exprs, expect
 tw: {ti0, ti1, t1, tw}, ti0: {ti0, t0}, ti1: {ti1, t1, t0}, t0: {t0}, t1: {t1}}'),
 ])
 def test_graph_trace(tu, tv, tw, ti0, ti1, t0, t1, exprs, expected):
-    g = temporaries_graph(EVAL(exprs, tu, tv, tw, ti0, ti1, t0, t1))
+    g = TemporariesGraph(EVAL(exprs, tu, tv, tw, ti0, ti1, t0, t1))
     mapper = eval(expected)
     for i in [tu, tv, tw, ti0, ti1, t0, t1]:
         assert set([j.lhs for j in g.trace(i)]) == mapper[i]
 
 
+@skipif_yask
 @pytest.mark.parametrize('exprs,expected', [
     # trivial
     (['Eq(t0, 1.)', 'Eq(t1, fa[x] + fb[x])'],
@@ -261,12 +279,28 @@ def test_graph_trace(tu, tv, tw, ti0, ti1, t0, t1, exprs, expected):
                       '{t0: True, t1: False}')),
 ])
 def test_graph_isindex(fa, fb, fc, t0, t1, t2, exprs, expected):
-    g = temporaries_graph(EVAL(exprs, fa, fb, fc, t0, t1, t2))
+    g = TemporariesGraph(EVAL(exprs, fa, fb, fc, t0, t1, t2))
     mapper = eval(expected)
     for k, v in mapper.items():
         assert g.is_index(k) == v
 
 
+@skipif_yask
+@pytest.mark.parametrize('expr,expected', [
+    ('2*fa[x] + fb[x]', '2*fa[x] + fb[x]'),
+    ('fa[x]**2', 'fa[x]*fa[x]'),
+    ('fa[x]**2 + fb[x]**3', 'fa[x]*fa[x] + fb[x]*fb[x]*fb[x]'),
+    ('3*fa[x]**4', '3*(fa[x]*fa[x]*fa[x]*fa[x])'),
+    ('fa[x]**2', 'fa[x]*fa[x]'),
+    ('1/(fa[x]**2)', 'fa[x]**(-2)'),
+    ('1/(fa[x] + fb[x])', '1/(fa[x] + fb[x])'),
+    ('3*sin(fa[x])**2', '3*(sin(fa[x])*sin(fa[x]))'),
+])
+def test_pow_to_mul(fa, fb, expr, expected):
+    assert str(pow_to_mul(eval(expr))) == expected
+
+
+@skipif_yask
 @pytest.mark.parametrize('exprs,expected', [
     # none (different distance)
     (['Eq(t0, fa[x] + fb[x])', 'Eq(t1, fa[x+1] + fb[x])'],
@@ -301,6 +335,7 @@ def test_collect_aliases(fa, fb, fc, fd, t0, t1, t2, t3, exprs, expected):
         assert (len(v.aliased) == 1 and mapper[k] is None) or v.anti_stencil == mapper[k]
 
 
+@skipif_yask
 @pytest.mark.parametrize('expr,expected', [
     ('Eq(t0, t1)', 0),
     ('Eq(t0, fa[x] + fb[x])', 1),

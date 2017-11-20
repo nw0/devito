@@ -3,7 +3,8 @@
 from collections import OrderedDict
 from os import environ
 
-__all__ = ['configuration', 'init_configuration']
+__all__ = ['configuration', 'init_configuration', 'print_defaults', 'print_state',
+           'add_sub_configuration']
 
 # Be EXTREMELY careful when writing to a Parameters dictionary
 # Read here for reference: http://wiki.c2.com/?GlobalVariablesAreBad
@@ -74,13 +75,15 @@ class Parameters(OrderedDict):
         for k, v in self.items():
             self._updated(k, v)
 
+    @property
+    def name(self):
+        return self._name
 
-configuration = Parameters("Devito-Configuration")
-"""The Devito configuration parameters."""
 
 env_vars_mapper = {
     'DEVITO_ARCH': 'compiler',
-    'DEVITO_AUTOTUNING': 'autotuning',
+    'DEVITO_ISA': 'isa',
+    'DEVITO_PLATFORM': 'platform',
     'DEVITO_BACKEND': 'backend',
     'DEVITO_DSE': 'dse',
     'DEVITO_DLE': 'dle',
@@ -88,12 +91,14 @@ env_vars_mapper = {
     'DEVITO_OPENMP': 'openmp',
     'DEVITO_LOGGING': 'log_level',
     'DEVITO_FIRST_TOUCH': 'first_touch',
-    'DEVITO_TRAVIS_TEST': 'travis_test',
     'DEVITO_DEBUG_COMPILER': 'debug_compiler',
 }
 
+configuration = Parameters("Devito-Configuration")
+"""The Devito configuration parameters."""
 
-def init_configuration():
+
+def init_configuration(configuration=configuration, env_vars_mapper=env_vars_mapper):
     # Populate /configuration/ with user-provided options
     if environ.get('DEVITO_CONFIG') is None:
         # Try env variables, otherwise stick to defaults
@@ -126,7 +131,7 @@ def init_configuration():
                 except (TypeError, ValueError):
                     keys[i] = j
         accepted = configuration._accepted[k]
-        if any(i not in accepted for i in keys):
+        if accepted is not None and any(i not in accepted for i in keys):
             raise ValueError("Illegal configuration parameter (%s, %s). "
                              "Accepted: %s" % (k, v, str(accepted)))
         if len(keys) == len(values):
@@ -137,3 +142,24 @@ def init_configuration():
             configuration.update(k, keys)
 
     configuration.initialize()
+
+
+def add_sub_configuration(sub_configuration, sub_env_vars_mapper=None):
+    init_configuration(sub_configuration, sub_env_vars_mapper or {})
+    setattr(configuration, sub_configuration.name, sub_configuration)
+
+
+def print_defaults():
+    """Print the environment variables accepted by Devito, their default value,
+    as well as all of the accepted values."""
+    from devito.logger import info
+    for k, v in env_vars_mapper.items():
+        info('%s: %s. Default: %s' % (k, configuration._accepted[v],
+                                      configuration._defaults[v]))
+
+
+def print_state():
+    """Print the current configuration state."""
+    from devito.logger import info
+    for k, v in configuration.items():
+        info('%s: %s' % (k, v))

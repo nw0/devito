@@ -4,13 +4,18 @@ import gc
 from sympy.core import cache
 
 from devito.base import *  # noqa
-from devito.backends import init_backend
 from devito.finite_difference import *  # noqa
 from devito.dimension import *  # noqa
-from devito.interfaces import Forward, Backward, _SymbolCache  # noqa
+from devito.grid import *  # noqa
+from devito.function import Forward, Backward  # noqa
+from devito.types import _SymbolCache  # noqa
 from devito.logger import error, warning, info  # noqa
-from devito.parameters import (configuration, init_configuration,  # noqa
-                               env_vars_mapper)
+from devito.parameters import *  # noqa
+from devito.symbolics import *  # noqa
+from devito.tools import *  # noqa
+
+from devito.compiler import compiler_registry, GNUCompiler
+from devito.backends import backends_registry, init_backend
 
 
 def clear_cache():
@@ -26,23 +31,40 @@ from ._version import get_versions  # noqa
 __version__ = get_versions()['version']
 del get_versions
 
+# First add the compiler configuration option...
+configuration.add('compiler', 'custom', list(compiler_registry),
+                  callback=lambda i: compiler_registry[i]())
 
-# Initialize the Devito backend
-configuration.add('travis_test', 0, [0, 1], lambda i: bool(i))
-configuration.add('autotuning', 'basic', ['none', 'basic', 'aggressive'])
+
+def _cast_and_update_compiler(val):
+    # Force re-build the compiler
+    compiler = configuration['compiler']
+    if isinstance(compiler, GNUCompiler):
+        compiler.__init__(version=compiler.version)
+    else:
+        compiler.__init__()
+    return bool(val)
+
+
+configuration.add('openmp', 0, [0, 1], callback=_cast_and_update_compiler)
+configuration.add('debug_compiler', 0, [0, 1], lambda i: bool(i))
+
+# ... then the backend configuration. The order is important since the
+# backend might depend on the compiler configuration.
+configuration.add('backend', 'core', list(backends_registry),
+                  callback=init_backend)
+
+# Set the Instruction Set Architecture (ISA)
+ISAs = [None, 'cpp', 'avx', 'avx2', 'avx512', 'knc']
+configuration.add('isa', None, ISAs)
+
+# Set the CPU architecture (only codename)
+PLATFORMs = [None, 'intel64', 'sandybridge', 'ivybridge', 'haswell',
+             'broadwell', 'skylake', 'knc', 'knl']
+# TODO: switch arch to actual architecture names; use the mapper in /YASK/
+configuration.add('platform', None, PLATFORMs)
+
+
+# Initialize the configuration, either from the environment or
+# defaults. This will also trigger the backend initialization
 init_configuration()
-init_backend(configuration['backend'])
-
-
-def print_defaults():
-    """Print the environment variables accepted by Devito, their default value,
-    as well as all of the accepted values."""
-    for k, v in env_vars_mapper.items():
-        info('%s: %s. Default: %s' % (k, configuration._accepted[v],
-                                      configuration._defaults[v]))
-
-
-def print_state():
-    """Print the current configuration state."""
-    for k, v in configuration.items():
-        info('%s: %s' % (k, v))

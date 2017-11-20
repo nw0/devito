@@ -1,7 +1,7 @@
 from functools import partial
 from hashlib import sha1
-from os import environ, getuid, mkdir, path
-from tempfile import gettempdir
+from os import environ, path
+from tempfile import mkdtemp
 from time import time
 from sys import platform
 import subprocess
@@ -43,7 +43,8 @@ class Compiler(GCCToolchain):
         * :data:`self.undefines`
     """
 
-    cpp_mapper = {'gcc': 'g++', 'clang': 'clang++', 'icc': 'icpc'}
+    cpp_mapper = {'gcc': 'g++', 'clang': 'clang++', 'icc': 'icpc',
+                  'gcc-4.9': 'g++-4.9', 'gcc-5': 'g++-5', 'gcc-6': 'g++-6'}
 
     fields = ['cc', 'ld']
 
@@ -193,12 +194,13 @@ def get_tmp_dir():
 
     :return: Path to a devito-specific tmp directory
     """
-    tmpdir = path.join(gettempdir(), "devito-%s" % getuid())
+    global _devito_compiler_tmpdir
+    try:
+        path.exists(_devito_compiler_tmpdir)
+    except:
+        _devito_compiler_tmpdir = mkdtemp(prefix="devito-")
 
-    if not path.exists(tmpdir):
-        mkdir(tmpdir)
-
-    return tmpdir
+    return _devito_compiler_tmpdir
 
 
 def load(basename, compiler):
@@ -254,7 +256,7 @@ def make(loc, args):
     """
     Invoke ``make`` command from within ``loc`` with arguments ``args``.
     """
-    hash_key = sha1(loc + str(args).encode()).hexdigest()
+    hash_key = sha1((loc + str(args)).encode()).hexdigest()
     logfile = path.join(get_tmp_dir(), "%s.log" % hash_key)
     errfile = path.join(get_tmp_dir(), "%s.err" % hash_key)
 
@@ -290,9 +292,3 @@ compiler_registry = {
     'intel-mic': IntelMICCompiler, 'mic': IntelMICCompiler,
     'intel-knl': IntelKNLCompiler, 'knl': IntelKNLCompiler,
 }
-
-
-configuration.add('compiler', 'custom', list(compiler_registry),
-                  lambda i: compiler_registry[i]())
-configuration.add('openmp', 0, [0, 1], lambda i: bool(i))
-configuration.add('debug_compiler', 0, [0, 1], lambda i: bool(i))

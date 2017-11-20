@@ -7,9 +7,8 @@ from functools import reduce
 from ctypes import Structure, byref, c_double
 from cgen import Struct, Value
 
-from devito.dse import estimate_cost, estimate_memory
-from devito.nodes import Expression, TimedList
-from devito.visitors import IsPerfectIteration, FindSections, FindNodes, Transformer
+from devito.ir.iet import Expression, TimedList, FindSections, FindNodes, Transformer
+from devito.symbolics import estimate_cost, estimate_memory
 
 __all__ = ['Profile', 'create_profile']
 
@@ -60,16 +59,18 @@ def create_profile(node):
     mapper = OrderedDict()
     for i, group in enumerate(found):
         name = 'section_%d' % i
-        section, remainder = group[0], group[1:]
 
-        index = len(section) > 1 and not IsPerfectIteration().visit(section[0])
-        root = section[index]
+        # We time at the single timestep level
+        for i in zip(*group):
+            root = i[0]
+            remainder = tuple(j for j in i if j is not root)
+            if not (root.dim.is_Time or root.dim.is_Stepping):
+                break
 
         # Prepare to transform the Iteration/Expression tree
-        body = tuple(j[index] for j in group)
+        body = (root,) + remainder
         mapper[root] = TimedList(gname=profiler.varname, lname=name, body=body)
-        for j in remainder:
-            mapper[j[index]] = None
+        mapper.update(OrderedDict([(j, None) for j in remainder]))
 
         # Estimate computational properties of the profiled section
         expressions = FindNodes(Expression).visit(body)
@@ -77,7 +78,7 @@ def create_profile(node):
         memory = estimate_memory([e.expr for e in expressions])
 
         # Keep track of the new profiled section
-        profiler.add(name, section, ops, memory)
+        profiler.add(name, group[0], ops, memory)
 
     # Transform the Iteration/Expression tree introducing the C-level timers
     processed = Transformer(mapper).visit(node)
@@ -118,7 +119,7 @@ class Profiler(object):
         self._C_timings = self.dtype()
         return byref(self._C_timings)
 
-    def summary(self, dim_sizes, dtype):
+    def summary(self, arguments, dtype):
         """
         Return a summary of the performance numbers measured.
 
@@ -131,31 +132,36 @@ class Profiler(object):
 
         summary = PerformanceSummary()
         for itspace, profile in self._sections.items():
-            dims = {i: i.dim.parent if i.dim.is_Buffered else i.dim for i in itspace}
+            dims = {i: i.dim.parent if i.dim.is_Stepping else i.dim for i in itspace}
 
             # Time
             time = self.timings[profile.name]
 
             # Flops
-            itershape = [i.extent(finish=dim_sizes.get(dims[i].name)) for i in itspace]
+            itershape = [i.extent(finish=arguments[dims[i].end_name],
+                                  start=arguments[dims[i].start_name]) for i in itspace]
             iterspace = reduce(operator.mul, itershape)
             flops = float(profile.ops*iterspace)
             gflops = flops/10**9
+            gpoints = iterspace/10**9
 
             # Compulsory traffic
-            datashape = [i.dim.size or dim_sizes[dims[i].name] for i in itspace]
+            datashape = [(arguments[dims[i].end_name] - arguments[dims[i].start_name])
+                         for i in itspace]
             dataspace = reduce(operator.mul, datashape)
-            traffic = profile.memory*dataspace*dtype().itemsize
-
+            traffic = float(profile.memory*dataspace*dtype().itemsize)
             # Derived metrics
             oi = flops/traffic
             gflopss = gflops/time
+            gpointss = gpoints/time
 
             # Keep track of performance achieved
-            summary.setsection(profile.name, time, gflopss, oi, itershape, datashape)
+            summary.setsection(profile.name, time, gflopss, gpointss, oi, profile.ops,
+                               itershape, datashape)
 
         # Rename the most time consuming section as 'main'
-        summary['main'] = summary.pop(max(summary, key=summary.get))
+        if len(summary) > 0:
+            summary['main'] = summary.pop(max(summary, key=summary.get))
 
         return summary
 
@@ -193,8 +199,8 @@ class PerformanceSummary(OrderedDict):
     A special dictionary to track and quickly access performance data.
     """
 
-    def setsection(self, key, time, gflopss, oi, itershape, datashape):
-        self[key] = PerfEntry(time, gflopss, oi, itershape, datashape)
+    def setsection(self, key, time, gflopss, gpointss, oi, ops, itershape, datashape):
+        self[key] = PerfEntry(time, gflopss, gpointss, oi, ops, itershape, datashape)
 
     @property
     def gflopss(self):
@@ -213,5 +219,5 @@ Profile = namedtuple('Profile', 'name ops memory')
 """Metadata for a profiled code section."""
 
 
-PerfEntry = namedtuple('PerfEntry', 'time gflopss oi itershape datashape')
+PerfEntry = namedtuple('PerfEntry', 'time gflopss gpointss oi ops itershape datashape')
 """Structured performance data."""

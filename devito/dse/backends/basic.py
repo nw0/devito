@@ -1,10 +1,10 @@
 from sympy import cos, sin
 
 from devito.dse.backends import AbstractRewriter, dse_pass
-from devito.dse.extended_sympy import bhaskara_cos, bhaskara_sin
+from devito.symbolics import bhaskara_cos, bhaskara_sin
 from devito.dse.manipulation import common_subexprs_elimination
 
-from devito.interfaces import ScalarFunction
+from devito.types import Scalar
 
 
 class BasicRewriter(AbstractRewriter):
@@ -19,14 +19,14 @@ class BasicRewriter(AbstractRewriter):
         extracted in previous passes.
         """
 
-        skip = [e for e in cluster.exprs if e.lhs.base.function.is_TensorFunction]
+        skip = [e for e in cluster.exprs if e.lhs.base.function.is_Array]
         candidates = [e for e in cluster.exprs if e not in skip]
 
-        make = lambda i: ScalarFunction(name=template(i)).indexify()
+        make = lambda i: Scalar(name=template(i)).indexify()
 
         processed = common_subexprs_elimination(candidates, make)
 
-        return cluster.reschedule(skip + processed)
+        return cluster.rebuild(skip + processed)
 
     @dse_pass
     def _optimize_trigonometry(self, cluster, **kwargs):

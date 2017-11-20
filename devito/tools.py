@@ -1,13 +1,19 @@
+import numpy as np
 import os
 import ctypes
-from collections import Callable, Iterable, OrderedDict
+from collections import Callable, Iterable, OrderedDict, Hashable
+from functools import partial
+from subprocess import PIPE, Popen
+import cpuinfo
 try:
     from itertools import izip_longest as zip_longest
 except ImportError:
     # Python3.5 compatibility
     from itertools import zip_longest
 
-import numpy as np
+from devito.parameters import configuration
+
+__all__ = ['memoized', 'infer_cpu']
 
 
 def as_tuple(item, type=None, length=None):
@@ -33,6 +39,13 @@ def as_tuple(item, type=None, length=None):
     if type and not all(isinstance(i, type) for i in t):
         raise TypeError("Items need to be of type %s" % type)
     return t
+
+
+def is_integer(value):
+    """
+    A thorough instance comparison for all integer types.
+    """
+    return isinstance(value, int) or isinstance(value, np.integer)
 
 
 def grouper(iterable, n):
@@ -65,6 +78,15 @@ def flatten(l):
         else:
             newlist.append(el)
     return newlist
+
+
+def single_or(l):
+    """Return True iff only one item is different than ``None``, False otherwise.
+    Note that this is not a XOR function, according to the truth table of the XOR
+    boolean function with n > 2 inputs. Hence the name ``single_or``."""
+    # No
+    i = iter(l)
+    return any(i) and not any(i)
 
 
 def filter_ordered(elements, key=None):
@@ -154,7 +176,7 @@ def pprint(node, verbose=True):
     """
     Shortcut to pretty print Iteration/Expression trees.
     """
-    from devito.visitors import printAST
+    from devito.ir.iet import printAST
     print(printAST(node, verbose))
 
 
@@ -210,3 +232,78 @@ class change_directory(object):
 
     def __exit__(self, etype, value, traceback):
         os.chdir(self.savedPath)
+
+
+class memoized(object):
+    """
+    Decorator. Caches a function's return value each time it is called.
+    If called later with the same arguments, the cached value is returned
+    (not reevaluated).
+
+    Adapted from: ::
+
+        https://wiki.python.org/moin/PythonDecoratorLibrary#Memoize
+    """
+
+    def __init__(self, func):
+        self.func = func
+        self.cache = {}
+
+    def __call__(self, *args):
+        if not isinstance(args, Hashable):
+            # Uncacheable, a list, for instance.
+            # Better to not cache than blow up.
+            return self.func(*args)
+        if args in self.cache:
+            return self.cache[args]
+        else:
+            value = self.func(*args)
+            self.cache[args] = value
+            return value
+
+    def __repr__(self):
+        """Return the function's docstring."""
+        return self.func.__doc__
+
+    def __get__(self, obj, objtype):
+        """Support instance methods."""
+        return partial(self.__call__, obj)
+
+
+default_isa = 'cpp'
+default_platform = 'intel64'
+
+
+def infer_cpu():
+    """
+    Detect the highest Instruction Set Architecture and the platform
+    codename using cpu flags and/or leveraging other tools. Return default
+    values if the detection procedure was unsuccesful.
+    """
+    info = cpuinfo.get_cpu_info()
+    # ISA
+    isa = default_isa
+    for i in reversed(configuration._accepted['isa']):
+        if i in info['flags']:
+            isa = i
+            break
+    # Platform
+    try:
+        # First, try leveraging `gcc`
+        p1 = Popen(['gcc', '-march=native', '-Q', '--help=target'], stdout=PIPE)
+        p2 = Popen(['grep', 'march'], stdin=p1.stdout, stdout=PIPE)
+        p1.stdout.close()  # Allow p1 to receive a SIGPIPE if p2 exits.
+        output, _ = p2.communicate()
+        platform = output.decode("utf-8").split()[1]
+    except:
+        # Then, try infer from the brand name, otherwise fallback to default
+        try:
+            mapper = {'v3': 'haswell', 'v4': 'broadwell', 'v5': 'skylake'}
+            cpu_iteration = info['brand'].split()[4]
+            platform = mapper[cpu_iteration]
+        except:
+            platform = None
+    # Is it a known platform?
+    if platform not in configuration._accepted['platform']:
+        platform = default_platform
+    return isa, platform

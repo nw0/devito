@@ -2,16 +2,13 @@ from __future__ import absolute_import
 
 from collections import OrderedDict
 
-from sympy import Eq
-
+from devito.ir import clusterize
 from devito.dse.aliases import collect
 from devito.dse.backends import BasicRewriter, dse_pass
-from devito.dse.clusterizer import clusterize
-from devito.dse.inspection import estimate_cost
+from devito.symbolics import Eq, estimate_cost, xreplace_constrained, iq_timeinvariant
 from devito.dse.manipulation import (common_subexprs_elimination, collect_nested,
-                                     xreplace_constrained)
-from devito.dse.queries import iq_timeinvariant
-from devito.interfaces import Indexed, ScalarFunction, TensorFunction
+                                     compact_temporaries)
+from devito.types import Indexed, Scalar, Array
 
 
 class AdvancedRewriter(BasicRewriter):
@@ -30,18 +27,22 @@ class AdvancedRewriter(BasicRewriter):
         """
 
         # Extract time invariants
-        make = lambda i: ScalarFunction(name=template(i)).indexify()
+        make = lambda i: Scalar(name=template(i)).indexify()
         rule = iq_timeinvariant(cluster.trace)
         costmodel = costmodel or (lambda e: estimate_cost(e) > 0)
         processed, found = xreplace_constrained(cluster.exprs, make, rule, costmodel)
-        leaves = [i for i in processed if i not in found]
 
-        # Search for common sub-expressions amongst them (and only them)
         if with_cse:
-            make = lambda i: ScalarFunction(name=template(i + len(found))).indexify()
+            leaves = [i for i in processed if i not in found]
+
+            # Search for common sub-expressions amongst them (and only them)
+            make = lambda i: Scalar(name=template(i + len(found))).indexify()
             found = common_subexprs_elimination(found, make)
 
-        return cluster.reschedule(found + leaves)
+            # Some temporaries may be droppable at this point
+            processed = compact_temporaries(found, leaves)
+
+        return cluster.rebuild(processed)
 
     @dse_pass
     def _factorize(self, cluster, *args, **kwargs):
@@ -112,9 +113,9 @@ class AdvancedRewriter(BasicRewriter):
         time_invariants = {v.rhs: g.time_invariant(v) for v in g.values()}
 
         # Template for captured redundancies
-        shape = tuple(i.symbolic_size for i in indices)
-        make = lambda i: TensorFunction(name=template(i), shape=shape,
-                                        dimensions=indices).indexed
+        shape = tuple(i.symbolic_extent for i in indices)
+        make = lambda i: Array(name=template(i), shape=shape,
+                               dimensions=indices).indexed
 
         # Find the candidate expressions
         processed = []

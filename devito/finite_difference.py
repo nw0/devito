@@ -5,10 +5,10 @@ from operator import mul
 
 from sympy import finite_diff_weights
 
-from devito.dimension import x, y
 from devito.logger import error
 
 __all__ = ['first_derivative', 'second_derivative', 'cross_derivative',
+           'generic_derivative', 'second_cross_derivative',
            'left', 'right', 'centered']
 
 
@@ -78,7 +78,7 @@ def second_derivative(*args, **kwargs):
        1.0*f(h + x, y)*g(h + x, y)) / h**2``.
     """
     order = kwargs.get('order', 2)
-    dim = kwargs.get('dim', x)
+    dim = kwargs.get('dim')
     diff = kwargs.get('diff', dim.spacing)
 
     ind = [(dim + i * diff) for i in range(-int(order / 2),
@@ -111,7 +111,7 @@ def cross_derivative(*args, **kwargs):
        ``f(-h + x, h + y)*g(-h + x, h + y) + f(h + x, y)*g(h + x, y) -``
        ``f(h + x, -h + y)*g(h + x, -h + y)) / h**2``
     """
-    dims = kwargs.get('dims', (x, y))
+    dims = kwargs.get('dims')
     diff = kwargs.get('diff', (dims[0].spacing, dims[1].spacing))
     order = kwargs.get('order', 1)
 
@@ -165,7 +165,7 @@ def first_derivative(*args, **kwargs):
        results in:
        ``*(-f(x)*g(x) + f(x + h)*g(x + h) ) / h``
     """
-    dim = kwargs.get('dim', x)
+    dim = kwargs.get('dim')
     diff = kwargs.get('diff', dim.spacing)
     order = int(kwargs.get('order', 1))
     matvec = kwargs.get('matvec', direct)
@@ -190,3 +190,34 @@ def first_derivative(*args, **kwargs):
             var = [a.subs({dim: ind[i]}) for a in args]
             deriv += c[i] * reduce(mul, var, 1)
     return matvec._transpose*deriv
+
+
+def generic_derivative(function, deriv_order, dim, fd_order):
+    """
+    Create generic arbitrary order derivative expression from a
+    single :class:`Function` object. This methods is essentially a
+    dedicated wrapper around SymPy's `as_finite_diff` utility for
+    :class:`devito.Function` objects.
+
+    :param function: The symbol representing a function.
+    :param deriv_order: Derivative order, eg. 2 for a second derivative.
+    :param dim: The dimension for which to take the derivative.
+    :param fd_order: Order of the coefficient discretization and thus
+                     the width of the resulting stencil expression.
+    """
+
+    deriv = function.diff(*(tuple(dim for _ in range(deriv_order))))
+    indices = [(dim + i * dim.spacing) for i in range(-fd_order, fd_order + 1)]
+    return deriv.as_finite_difference(indices)
+
+
+def second_cross_derivative(function, dims, order):
+    """
+    Create a second order order cross derivative for a given function.
+
+    :param function: The symbol representing a function.
+    :param dims: Dimensions for which to take the derivative.
+    :param order: Discretisation order of the stencil to create.
+    """
+    first = second_derivative(function, dim=dims[0], width=order)
+    return second_derivative(first, dim=dims[1], order=order)

@@ -1,5 +1,4 @@
-from collections import Sequence
-
+from devito.ir.iet import Node
 from devito.dle.backends import (State, BasicRewriter, DevitoCustomRewriter,
                                  DevitoRewriter, DevitoRewriterSafeMath,
                                  DevitoSpeculativeRewriter)
@@ -61,17 +60,7 @@ def transform(node, mode='basic', options=None):
         * 'blockalways': Apply blocking even though the DLE thinks it's not
                          worthwhile applying it.
     """
-    # Check input parameters
-    if not (mode is None or isinstance(mode, str)):
-        raise ValueError("Parameter 'mode' should be a string, not %s." % type(mode))
-
-    if isinstance(node, Sequence):
-        assert all(n.is_Node for n in node)
-        node = list(node)
-    elif node.is_Node:
-        node = [node]
-    else:
-        raise ValueError("Got illegal node of type %s." % type(node))
+    assert isinstance(node, Node)
 
     # Parse options (local options take precedence over global options)
     options = options or {}
@@ -85,6 +74,10 @@ def transform(node, mode='basic', options=None):
     params.update({k: v for k, v in default_options.items() if k not in params})
     params['compiler'] = configuration['compiler']
     params['openmp'] = configuration['openmp']
+
+    # Force OpenMP if parallelism was requested, even though mode is 'noop'
+    if mode == 'noop' and params['openmp'] is True:
+        mode = 'openmp'
 
     # Process the Iteration/Expression tree through the DLE
     if mode is None or mode == 'noop':
