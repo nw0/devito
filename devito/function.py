@@ -104,6 +104,12 @@ class Function(TensorFunction):
 
     .. note::
 
+        The parameters :param name: and :param shape: must always be
+        present and given as keyword arguments, since SymPy uses `*args`
+        to (re-)create the dimension arguments of the symbolic function.
+
+    .. note::
+
        If the parameter ``grid`` is provided, the values for ``shape``,
        ``dimensions`` and ``dtype`` will be derived from it.
 
