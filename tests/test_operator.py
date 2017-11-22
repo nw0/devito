@@ -434,6 +434,28 @@ class TestArguments(object):
         assert(np.allclose(a.data[start:end, start:end, start:end], 1))
         assert(np.allclose(a.data[mask], 0))
 
+    def test_start_end_with_offsets(self):
+        grid = Grid(shape=(11, 11))
+        x, y = grid.dimensions
+        a = Function(name='a', grid=grid)
+        A = a.indexed
+
+        # Reference case with no offsets
+        a.data[:] = 1.
+        Operator(Eq(a, a + a))(x_s=3, x_e=7)
+        print(a.data)
+        assert (a.data[:3, :] == 1.).all()
+        assert (a.data[3:7, :] > 1.).all()
+        assert (a.data[7:, :] == 1.).all()
+
+        # Test case with stencil offsets
+        a.data[:] = 1.
+        Operator(Eq(a, a + (A[x-1, y] + A[x+1, y]) / 2.))(x_s=3, x_e=7)
+        print(a.data)
+        assert (a.data[:4, :] == 1.).all()
+        assert (a.data[4:6, :] > 1.).all()
+        assert (a.data[6:, :] == 1.).all()
+
     def test_argument_derivation_order(self, nt=100):
         """ Ensure the precedence order of arguments is respected
         Defaults < (overriden by) Tensor Arguments < Dimensions < Scalar Arguments

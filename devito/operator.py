@@ -176,8 +176,6 @@ class Operator(Callable):
         for i in self.parameters:
             if i.is_ScalarArgument:
                 user_provided_value = kwargs.pop(i.name, None)
-                if user_provided_value is not None:
-                    user_provided_value += self.argument_offsets.get(i.name, 0)
                 i.verify(user_provided_value, enforce=True)
         dim_sizes = {}
         for d in self.dimensions:
