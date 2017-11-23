@@ -20,7 +20,7 @@ from devito.ir.clusters import clusterize
 from devito.ir.iet import (Element, Expression, Callable, Iteration, List,
                            LocalExpression, MapExpressions, ResolveTimeStepping,
                            SubstituteExpression, Transformer, NestedTransformer,
-                           analyze_iterations, compose_nodes, filter_iterations)
+                           analyze_iterations, compose_nodes, filter_iterations, printAST)
 from devito.ir.support import Stencil
 from devito.parameters import configuration
 from devito.profiling import create_profile
@@ -119,6 +119,8 @@ class Operator(Callable):
 
         # Translate into backend-specific representation (e.g., GPU, Yask)
         nodes = self._specialize(nodes, parameters)
+
+        printAST(nodes)
 
         # Apply the Devito Loop Engine (DLE) for loop optimization
         dle_state = transform(nodes, *set_dle_mode(dle))
