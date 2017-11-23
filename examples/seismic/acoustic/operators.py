@@ -110,7 +110,7 @@ def AdjointOperator(model, source, receiver, time_order=2, space_order=4, **kwar
     """
     m, damp = model.m, model.damp
 
-    v = TimeFunction(name='v', grid=model.grid, save=False,
+    v = TimeFunction(name='v', grid=model.grid, save=None,
                      time_order=2, space_order=space_order)
     srca = PointSource(name='srca', grid=model.grid, ntime=source.nt,
                        npoint=source.npoint)
@@ -152,7 +152,7 @@ def GradientOperator(model, source, receiver, time_order=2, space_order=4, save=
     grad = Function(name='grad', grid=model.grid)
     u = TimeFunction(name='u', grid=model.grid, save=source.nt if save
                      else None, time_order=2, space_order=space_order)
-    v = TimeFunction(name='v', grid=model.grid, save=False,
+    v = TimeFunction(name='v', grid=model.grid, save=None,
                      time_order=2, space_order=space_order)
     rec = Receiver(name='rec', grid=model.grid, ntime=receiver.nt,
                    npoint=receiver.npoint)
@@ -197,9 +197,9 @@ def BornOperator(model, source, receiver, time_order=2, space_order=4, **kwargs)
                    npoint=receiver.npoint)
 
     # Create wavefields and a dm field
-    u = TimeFunction(name="u", grid=model.grid, save=False,
+    u = TimeFunction(name="u", grid=model.grid, save=None,
                      time_order=2, space_order=space_order)
-    U = TimeFunction(name="U", grid=model.grid, save=False,
+    U = TimeFunction(name="U", grid=model.grid, save=None,
                      time_order=2, space_order=space_order)
     dm = Function(name="dm", grid=model.grid)
 
