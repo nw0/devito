@@ -4,7 +4,7 @@ from cached_property import cached_property
 from devito.arguments import DimensionArgProvider
 from devito.types import Symbol
 
-__all__ = ['Dimension', 'SpaceDimension', 'TimeDimension', 'SteppingDimension']
+__all__ = ['Dimension', 'SpaceDimension', 'TimeDimension', 'SteppingDimension', 'SubsampledDimension']
 
 
 class Dimension(sympy.Symbol, DimensionArgProvider):
@@ -135,12 +135,12 @@ class SteppingDimension(DerivedDimension):
     """
     is_Stepping = True
     def __new__(cls, name, parent, **kwargs):
-        newobj = sympy.Symbol.__new__(cls, name)
+        newobj = super(SteppingDimension, cls).__new__(cls, name, parent, **kwargs)
         newobj.modulo = kwargs.get('modulo', 2)
         return newobj
 
 
-class SubsampledDimension(Dimension):
+class SubsampledDimension(DerivedDimension):
     is_SubSampled = True
 
     """
@@ -149,17 +149,9 @@ class SubsampledDimension(Dimension):
     """
 
     def __new__(cls, name, parent, **kwargs):
-        newobj = sympy.Symbol.__new__(cls, name)
-        assert isinstance(parent, Dimension)
-        newobj.parent = parent
+        newobj = super(SubsampledDimension, cls).__new__(cls, name, parent, **kwargs)
         newobj.factor = kwargs.get('factor', 4)
-
-        # Inherit time/space identifiers
-        cls.is_Time = parent.is_Time
-        cls.is_Space = parent.is_Space
-
-        return newobj
-    
+        return newobj    
 
 
 class LoweredDimension(Dimension):
