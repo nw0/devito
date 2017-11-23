@@ -364,7 +364,7 @@ class TimeFunction(Function):
         if not self._cached():
             super(TimeFunction, self).__init__(*args, **kwargs)
             self.time_dim = kwargs.get('time_dim', None)
-            if self.time_dim is not None and not isinstance(self.time_dim, TimeDimension):
+            if self.time_dim is not None and not self.time_dim.is_Time:
                 raise ValueError("time_dim must be a TimeDimension, not %s" %
                                  type(self.time_dim))
             self.time_order = kwargs.get('time_order', 1)
@@ -407,7 +407,8 @@ class TimeFunction(Function):
         time_dim = kwargs.get('time_dim', None)
 
         if time_dim is not None:
-            assert(isinstance(time_dim, TimeDimension))
+            assert(isinstance(time_dim, Dimension))
+            assert(time_dim.is_Time)
 
         if grid is None:
             error('TimeFunction objects require a grid parameter.')

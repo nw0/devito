@@ -739,7 +739,10 @@ class ResolveTimeStepping(Transformer):
                 subs[o.dim + off] = LoweredDimension(vname.name, o.dim, off)
             # Always lower to symbol
             subs[o.dim.parent] = Scalar(name=o.dim.parent.name, dtype=np.int32)
-            return o._rebuild(index=o.dim.parent.name, uindices=init), subs
+            return o._rebuild(index=o.dim.parent.name, uindices=init, limits=o.dim.parent.limits), subs
+        elif o.dim.is_SubSampled:
+            subs[o.dim.parent] = Scalar(name=o.dim.parent.name, dtype=np.int32)
+            return o._rebuild(index=o.dim.parent.name, limits=o.dim.parent.limits), subs
         else:
             return o._rebuild(*nodes), subs
 

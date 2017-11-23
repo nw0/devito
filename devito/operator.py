@@ -92,7 +92,7 @@ class Operator(Callable):
 
         # Set the direction of time acoording to the given TimeAxis
         for time in [d for d in self.dimensions if d.is_Time]:
-            if not time.is_Stepping:
+            if not time.is_Derived:
                 time.reverse = time_axis == Backward
 
         # Parameters of the Operator (Dimensions necessary for data casts)
@@ -448,7 +448,7 @@ class Operator(Callable):
                 dimensions.extend([k for k in i.free_symbols
                                    if isinstance(k, Dimension)])
             dimensions.extend(list(indexed.base.function.indices))
-        dimensions.extend([d.parent for d in dimensions if d.is_Stepping])
+        dimensions.extend([d.parent for d in dimensions if d.is_Derived])
         dimensions = filter_sorted(dimensions, key=attrgetter('name'))
 
         return input, output, dimensions

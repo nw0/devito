@@ -144,12 +144,11 @@ class SteppingDimension(DerivedDimension):
 
 
 class SubsampledDimension(DerivedDimension):
-    is_SubSampled = True
-
     """
     Dimension symbol that defines an iteration that proceeds with an increment
     of more than 1.
     """
+    is_SubSampled = True
 
     def __new__(cls, name, parent, **kwargs):
         newobj = super(SubsampledDimension, cls).__new__(cls, name, parent, **kwargs)
