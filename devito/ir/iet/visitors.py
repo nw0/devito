@@ -742,6 +742,7 @@ class ResolveTimeStepping(Transformer):
             return o._rebuild(index=o.dim.parent.name, uindices=init, limits=o.dim.parent.limits), subs
         elif o.dim.is_SubSampled:
             subs[o.dim.parent] = Scalar(name=o.dim.parent.name, dtype=np.int32)
+            subs[o.dim] = subs[o.dim.parent]
             return o._rebuild(index=o.dim.parent.name, limits=o.dim.parent.limits), subs
         else:
             return o._rebuild(*nodes), subs
