@@ -83,6 +83,7 @@ def set_log_level(level):
     :param level: accepted values are: DEBUG, INFO, AUTOTUNER, DSE, DSE_WARN,
                   DLE, DLE_WARN, WARNING, ERROR, CRITICAL
     """
+    print("SET LOG LEVEL %s" % level)
     if level not in logger_registry:
         raise ValueError("Illegal logging level %s" % level)
     logger.setLevel(level)
