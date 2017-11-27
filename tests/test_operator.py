@@ -845,7 +845,7 @@ class TestLoopScheduler(object):
         time = grid.time_dim
         t = grid.stepping_dim
         u1 = TimeFunction(name='u1', grid=grid)
-        u2 = TimeFunction(name='u2', grid=grid, save=True, time_dim=2)
+        u2 = TimeFunction(name='u2', grid=grid, save=2)
         eqn_1 = Eq(u1.indexed[t+1, x, y, z], u1.indexed[t, x, y, z] + 1.)
         eqn_2 = Eq(u2.indexed[time+1, x, y, z], u2.indexed[time, x, y, z] + 1.)
         op = Operator([eqn_1, eqn_2], dse='noop', dle='noop')
