@@ -251,7 +251,7 @@ class Operator(Callable):
     def _store_argument_offsets(self, stencils):
         offs = Stencil.union(*stencils)
         arg_offs = {d: v for d, v in offs.diameter.items()}
-        arg_offs.update({d.parent: v for d, v in arg_offs.items() if d.is_Stepping})
+        arg_offs.update({d.parent: v for d, v in arg_offs.items() if d.is_Derived})
         self.argument_offsets = {d.end_name: v for d, v in arg_offs.items()}
 
     @property
@@ -421,7 +421,7 @@ class Operator(Callable):
         dimensions = set.union(*[set(i.dimensions) for i in stencils])
 
         # Filter out aliasing stepping dimensions
-        mapper = {d.parent: d for d in dimensions if d.is_Stepping}
+        mapper = {d.parent: d for d in dimensions if d.is_Derived}
         return [i.replace(mapper) for i in stencils]
 
     def _retrieve_symbols(self, expressions):
