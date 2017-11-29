@@ -73,7 +73,9 @@ before_script:
 
 script:
   - flake8 --builtins=ArgumentError .
+  - numastat -m
   - py.test -vs tests/
+  - numastat -m
 
   # Additional seismic operator tests
   - if [[ $DEVITO_BACKEND != 'yask' ]]; then
@@ -81,14 +83,18 @@ script:
       python examples/seismic/benchmark.py test -P tti -so 4 -a -d 20 20 20 -n 5;
       python examples/seismic/benchmark.py test -P acoustic -a;
       python examples/seismic/acoustic/acoustic_example.py --full;
+      - numastat -m
       python examples/seismic/acoustic/acoustic_example.py --constant --full;
       python examples/seismic/acoustic/gradient_example.py;
       python examples/checkpointing/checkpointing_example.py;
     fi
 
   # Test tutorial notebooks for the website using nbval
+  - numastat -m
   - if [[ $DEVITO_BACKEND != 'yask' ]]; then py.test -vs --nbval examples/seismic/tutorials; fi
+  - numastat -m
   - if [[ $DEVITO_BACKEND != 'yask' ]]; then py.test -vs --nbval examples/cfd; fi
+  - numastat -m
 
   # Docs generation and deployment
   - sphinx-apidoc -f -o docs/ examples
