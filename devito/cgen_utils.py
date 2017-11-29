@@ -98,7 +98,7 @@ class CodePrinter(C99CodePrinter):
         # http://en.cppreference.com/w/cpp/language/floating_literal
         p, q = int(expr.p), int(expr.q)
 
-        return '%d.0F/%d.0F' % (p, q)  # float precision by default
+        return '%d.0/%d.0' % (p, q)  # float precision by default
 
     def _print_Mod(self, expr):
         """Print mod using % operator in C++
