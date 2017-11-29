@@ -2,6 +2,7 @@ import numpy as np
 import sympy
 from collections import OrderedDict
 from functools import partial
+from psutil import virtual_memory
 
 from devito.parameters import configuration
 from devito.logger import debug, error, warning
@@ -264,7 +265,9 @@ class Function(TensorFunction):
 
     def _allocate_memory(self):
         """Allocate memory in terms of numpy ndarrays."""
-        debug("Allocating memory for %s (%s)" % (self.name, str(self.shape)))
+        mem, G = virtual_memory(), 1024**3
+        debug("Allocating memory for %s (%s) :: Mem usage %.2f/%.2fGB (%.1f%%)" % (
+            self.name, str(self.shape), mem.used/G, mem.total/G, mem.percent))
         self._data_object = CMemory(self.shape, dtype=self.dtype)
         if self._first_touch:
             first_touch(self)
