@@ -23,7 +23,7 @@ from devito.tools import as_tuple, filter_ordered, filter_sorted, flatten, ctype
 
 __all__ = ['FindNodes', 'FindSections', 'FindSymbols', 'MapExpressions',
            'IsPerfectIteration', 'SubstituteExpression', 'printAST', 'CGen',
-           'ResolveTimeStepping', 'Transformer', 'NestedTransformer',
+           'ResolveTimeStepping', 'Transformer', 'NestedTransformer', 'SkewTransformer',
            'FindAdjacentIterations', 'MergeOuterIterations', 'MapIteration']
 
 
@@ -653,6 +653,22 @@ class Transformer(Visitor):
         if isinstance(o, Node) and obj is not o:
             self.rebuilt[o] = obj
         return obj
+
+
+class SkewTransformer(Transformer):
+
+    def visit_Iteration(self, o, **kwargs):
+        if o in self.mapper:
+            handle = self.mapper[o]
+            if handle is None:
+                return None
+            nodes = [self.visit(node, **kwargs) for node in o.children[0]]
+            args = handle.args
+            del args['nodes']
+            return handle._rebuild(nodes, **args)
+        else:
+            rebuilt = [self.visit(i, **kwargs) for i in o.children]
+            return o._rebuild(*rebuilt, **o.args_frozen)
 
 
 class NestedTransformer(Transformer):

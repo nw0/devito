@@ -19,8 +19,9 @@ from devito.exceptions import DLEException
 from devito.ir.iet import (Block, Expression, Iteration, List,
                            PARALLEL, ELEMENTAL, REMAINDER, tagger,
                            FindNodes, FindSymbols, IsPerfectIteration,
-                           SubstituteExpression, Transformer, compose_nodes,
-                           retrieve_iteration_tree, filter_iterations, copy_arrays)
+                           SubstituteExpression, SkewTransformer, Transformer,
+                           compose_nodes, retrieve_iteration_tree,
+                           filter_iterations, copy_arrays)
 from devito.logger import dle_warning
 from devito.tools import as_tuple, grouper, roundm
 from devito.types import Array
