@@ -536,3 +536,40 @@ class DevitoCustomRewriter(DevitoSpeculativeRewriter):
     def _pipeline(self, state):
         for i in self.passes:
             DevitoCustomRewriter.passes_mapper[i](self, state)
+
+
+class DevitoLoopSkewingRewriter(DevitoRewriter):
+
+    def _pipeline(self, state):
+        self._avoid_denormals(state)
+        self._loop_fission(state)
+        self._loop_skewing(state)
+        # self._loop_blocking(state)
+        self._simdize(state)
+        if self.params['openmp'] is True:
+            self._ompize(state)
+        self._create_elemental_functions(state)
+        self._minimize_remainders(state)
+
+    @dle_pass
+    def _loop_skewing(self, nodes, state):
+        # We want to use Transformer to change the loop bounds,
+        # then SubstituteExpression to change the accesses
+        mapper = {}
+        subs = {}
+
+        for tree in retrieve_iteration_tree(nodes):
+            for itr in tree:
+                # Just add on offset to each access, and change the loop bounds
+                # Add 1 to the bounds and Sub 1 from each offset
+
+                # If accesses are more complex, may impact correctness
+                # FIXME: change accesses in the loop setup/iteration (body accesses done)
+                subs[itr.dim] = itr.dim - 1
+                args = itr.args_frozen
+                args['limits'] = [itr.limits[0] + 1, itr.limits[1] + 1, itr.limits[2]]
+                mapper[itr] = Iteration(itr.nodes, **args)
+
+        processed = SkewTransformer(mapper).visit(nodes)
+        processed = SubstituteExpression(subs).visit(processed)
+        return processed, {}

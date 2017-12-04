@@ -68,7 +68,7 @@ if __name__ == "__main__":
                                  "speculative", "aggressive"],
                         help="Devito symbolic engine (DSE) mode")
     parser.add_argument("-dle", default="advanced",
-                        choices=["noop", "advanced", "speculative"],
+                        choices=["noop", "advanced", "speculative", "loop-skew"],
                         help="Devito loop engine (DSE) mode")
     args = parser.parse_args()
 

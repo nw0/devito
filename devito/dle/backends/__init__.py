@@ -2,4 +2,5 @@ from devito.dle.backends.common import *  # noqa
 from devito.dle.backends.utils import *  # noqa
 from devito.dle.backends.basic import BasicRewriter  # noqa
 from devito.dle.backends.advanced import (DevitoRewriter, DevitoSpeculativeRewriter,  # noqa
-                                          DevitoRewriterSafeMath, DevitoCustomRewriter)  # noqa
+                                          DevitoRewriterSafeMath, DevitoCustomRewriter, #noqa
+                                          DevitoLoopSkewingRewriter)  # noqa

@@ -331,6 +331,17 @@ def test_cache_blocking_time_loop(shape, time_order, blockshape, blockinner):
 
 
 @skipif_yask
+@pytest.mark.parametrize("shape", [(20, 33), (45, 31, 45)])
+@pytest.mark.parametrize("time_order", [2])
+def test_skew(shape, time_order):
+    wo_blocking, _ = _new_operator2(shape, time_order, dle='noop')
+    w_blocking, _ = _new_operator2(shape, time_order,
+                                   dle=('loop-skew'))
+
+    assert np.equal(wo_blocking.data, w_blocking.data).all()
+
+
+@skipif_yask
 @pytest.mark.parametrize("shape,blockshape", [
     ((25, 25, 46), (None, None, None)),
     ((25, 25, 46), (7, None, None)),

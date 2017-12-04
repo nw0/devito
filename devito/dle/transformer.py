@@ -1,7 +1,7 @@
 from devito.ir.iet import Node
 from devito.dle.backends import (State, BasicRewriter, DevitoCustomRewriter,
                                  DevitoRewriter, DevitoRewriterSafeMath,
-                                 DevitoSpeculativeRewriter)
+                                 DevitoSpeculativeRewriter, DevitoLoopSkewingRewriter)
 from devito.exceptions import DLEException
 from devito.logger import dle_warning
 from devito.parameters import configuration
@@ -13,7 +13,8 @@ modes = {
     'basic': BasicRewriter,
     'advanced': DevitoRewriter,
     'advanced-safemath': DevitoRewriterSafeMath,
-    'speculative': DevitoSpeculativeRewriter
+    'speculative': DevitoSpeculativeRewriter,
+    'loop-skew': DevitoLoopSkewingRewriter
 }
 """The DLE transformation modes."""
 
