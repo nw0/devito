@@ -21,7 +21,7 @@ from devito.ir.iet import (Block, Expression, Iteration, List,
                            FindNodes, FindSymbols, IsPerfectIteration,
                            SubstituteExpression, SkewTransformer, Transformer,
                            compose_nodes, retrieve_iteration_tree,
-                           filter_iterations, copy_arrays)
+                           filter_iterations, copy_arrays, UnboundedIndex)
 from devito.logger import dle_warning
 from devito.tools import as_tuple, grouper, roundm
 from devito.types import Array
@@ -560,14 +560,21 @@ class DevitoLoopSkewingRewriter(DevitoRewriter):
 
         for tree in retrieve_iteration_tree(nodes):
             for itr in tree:
-                # Just add on offset to each access, and change the loop bounds
+                # Just add an offset to each access, and change the loop bounds
                 # Add 1 to the bounds and Sub 1 from each offset
 
                 # If accesses are more complex, may impact correctness
-                # FIXME: change accesses in the loop setup/iteration (body accesses done)
                 subs[itr.dim] = itr.dim - 1
                 args = itr.args_frozen
                 args['limits'] = [itr.limits[0] + 1, itr.limits[1] + 1, itr.limits[2]]
+                args['uindices'] = []
+                for i in itr.uindices:
+                    index = i
+                    # FIXME: what if s appears in step but not start?
+                    for s in i.start.free_symbols:
+                        if s.name == itr.index:
+                            index = UnboundedIndex(i.index, i.start.xreplace({s: s - 1}), i.step.xreplace({s: s - 1}))
+                    args['uindices'].append(index)
                 mapper[itr] = Iteration(itr.nodes, **args)
 
         processed = SkewTransformer(mapper).visit(nodes)
