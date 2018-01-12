@@ -18,7 +18,7 @@ class PartialCluster(object):
     the embedded sequence of expressions are subjected to modifications.
     """
 
-    def __init__(self, exprs, stencil):
+    def __init__(self, exprs, stencil, skewed_loops={}):
         """
         Initialize a PartialCluster.
 
@@ -29,6 +29,7 @@ class PartialCluster(object):
         """
         self._exprs = list(exprs)
         self._stencil = stencil
+        self.skewed_loops = skewed_loops
 
     @property
     def exprs(self):
@@ -70,9 +71,10 @@ class Cluster(PartialCluster):
 
     """A Cluster is an immutable PartialCluster."""
 
-    def __init__(self, exprs, stencil):
+    def __init__(self, exprs, stencil, skewed_loops={}):
         self._exprs = as_tuple(exprs)
         self._stencil = stencil.frozen
+        self.skewed_loops = skewed_loops
 
     @cached_property
     def trace(self):
@@ -90,7 +92,7 @@ class Cluster(PartialCluster):
         """
         Build a new cluster with expressions ``exprs`` having same stencil as ``self``.
         """
-        return Cluster(exprs, self.stencil)
+        return Cluster(exprs, self.stencil, self.skewed_loops)
 
     @PartialCluster.exprs.setter
     def exprs(self, val):
@@ -120,7 +122,7 @@ class ClusterGroup(list):
         Return a new ClusterGroup in which all of ``self``'s Clusters have
         been promoted to PartialClusters. The ``atomics`` information is lost.
         """
-        return ClusterGroup([PartialCluster(i.exprs, i.stencil)
+        return ClusterGroup([PartialCluster(i.exprs, i.stencil, i.skewed_loops)
                              if isinstance(i, Cluster) else i for i in self])
 
     def freeze(self):
@@ -131,7 +133,7 @@ class ClusterGroup(list):
         clusters = ClusterGroup()
         for i in self:
             if isinstance(i, PartialCluster):
-                cluster = Cluster(i.exprs, i.stencil)
+                cluster = Cluster(i.exprs, i.stencil, i.skewed_loops)
                 clusters.append(cluster)
                 clusters.atomics[cluster] = self.atomics[i]
             else:

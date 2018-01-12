@@ -15,6 +15,7 @@ from devito.dle import transform
 from devito.dse import rewrite
 from devito.exceptions import InvalidArgument, InvalidOperator
 from devito.function import Forward, Backward, CompositeFunction
+from devito.ir import Cluster
 from devito.logger import bar, error, info
 from devito.ir.clusters import clusterize
 from devito.ir.iet import (Element, Expression, Callable, Iteration, List,
@@ -300,8 +301,8 @@ class Operator(Callable):
         best block sizes when loop blocking is in use."""
         return arguments
 
-    def _schedule_expressions(self, clusters):
-        """Create an Iteartion/Expression tree given an iterable of
+    def _schedule_expressions(self, clusters: Cluster):
+        """Create an Iteration/Expression tree given an iterable of
         :class:`Cluster` objects."""
 
         # Build the Iteration/Expression tree
@@ -326,8 +327,12 @@ class Operator(Callable):
                 needed = entries[index:]
 
                 # Build and insert the required Iterations
-                iters = [Iteration([], j.dim, j.dim.limits, offsets=j.ofs) for j in
-                         needed]
+                iters = []
+                for j in needed:
+                    limits = j.dim.limits
+                    if j.dim in i.skewed_loops:
+                        limits = [l - i.skewed_loops[j.dim] for l in limits]
+                    iters.append(Iteration([], j.dim, limits, offsets=j.ofs))
                 body, tree = compose_nodes(iters + [expressions], retrieve=True)
                 scheduling = OrderedDict(zip(needed, tree))
                 if root is None:

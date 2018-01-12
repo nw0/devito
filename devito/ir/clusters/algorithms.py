@@ -259,7 +259,7 @@ def clusterize(exprs, stencils):
     clusters = ClusterGroup()
     for target, pc in mapper.items():
         exprs = [i for i in pc.exprs if i.lhs.is_Symbol or i.lhs == target]
-        clusters.append(PartialCluster(exprs, pc.stencil))
+        clusters.append(PartialCluster(exprs, pc.stencil, pc.skewed_loops))
 
     # Attempt grouping as many PartialClusters as possible together
     return groupby(clusters)
