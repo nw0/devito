@@ -2,7 +2,7 @@ from __future__ import absolute_import
 
 from devito.ir.clusters import ClusterGroup, groupby
 from devito.dse.backends import (BasicRewriter, AdvancedRewriter, SpeculativeRewriter,
-                                 AggressiveRewriter, CustomRewriter)
+                                 AggressiveRewriter, CustomRewriter, SkewingRewriter)
 from devito.exceptions import DSEException
 from devito.logger import dse_warning
 from devito.parameters import configuration
@@ -13,6 +13,7 @@ __all__ = ['rewrite']
 modes = {
     'basic': BasicRewriter,
     'advanced': AdvancedRewriter,
+    'skewing': SkewingRewriter,
     'speculative': SpeculativeRewriter,
     'aggressive': AggressiveRewriter
 }

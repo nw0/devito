@@ -5,7 +5,7 @@ from collections import OrderedDict
 from devito.ir import clusterize
 from devito.dse.aliases import collect
 from devito.dse.backends import BasicRewriter, dse_pass
-from devito.symbolics import Eq, estimate_cost, xreplace_constrained, iq_timeinvariant
+from devito.symbolics import Eq, estimate_cost, xreplace_constrained, iq_timeinvariant, xreplace_indices
 from devito.dse.manipulation import (common_subexprs_elimination, collect_nested,
                                      compact_temporaries)
 from devito.types import Indexed, Scalar, Array
@@ -162,3 +162,30 @@ class AdvancedRewriter(BasicRewriter):
         processed = [e.xreplace(rules) for e in processed]
 
         return alias_clusters + [cluster.rebuild(processed)]
+
+
+class SkewingRewriter(AdvancedRewriter):
+
+    def _pipeline(self, state):
+        self._extract_time_invariants(state)
+        self._eliminate_inter_stencil_redundancies(state)
+        self._eliminate_intra_stencil_redundancies(state)
+        self._factorize(state)
+        self._loop_skew(state)
+
+    @dse_pass
+    def _loop_skew(self, cluster, template, **kwargs):
+        # FIXME: this is probably the wrong way to find the time dimension
+        t, mapper = None, {}
+        for dim in cluster.stencil.dimensions:
+            if t is not None:
+                mapper[dim] = dim - 2 * t
+            elif dim.is_Time:
+                t = dim.parent
+        # FIXME: need to modify loop headers
+
+        if t is None:
+            return cluster
+
+        processed = xreplace_indices(cluster.exprs, mapper)
+        return cluster.rebuild(processed)

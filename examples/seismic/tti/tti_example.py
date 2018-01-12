@@ -64,7 +64,7 @@ if __name__ == "__main__":
                         choices=['centered', 'shifted'],
                         help="Choice of finite-difference kernel")
     parser.add_argument("-dse", "-dse", default="advanced",
-                        choices=["noop", "basic", "advanced",
+                        choices=["noop", "basic", "advanced", "skewing",
                                  "speculative", "aggressive"],
                         help="Devito symbolic engine (DSE) mode")
     parser.add_argument("-dle", default="advanced",
