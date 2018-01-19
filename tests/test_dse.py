@@ -62,7 +62,7 @@ def test_acoustic_rewrite_basic():
 
 # TTI
 
-def tti_operator(dse=False, space_order=4):
+def tti_operator(dse=False, space_order=4, dle='advanced'):
     nrec = 101
     t0 = 0.0
     tn = 250.
@@ -91,7 +91,8 @@ def tti_operator(dse=False, space_order=4):
     rec.coordinates.data[:, 1:] = src.coordinates.data[0, 1:]
 
     return AnisotropicWaveSolver(model, source=src, receiver=rec,
-                                 time_order=2, space_order=space_order, dse=dse)
+                                 time_order=2, space_order=space_order, dse=dse,
+                                 dle=dle)
 
 
 @pytest.fixture(scope="session")
@@ -128,6 +129,15 @@ def test_tti_clusters_to_graph():
 @skipif_yask
 def test_tti_rewrite_basic(tti_nodse):
     operator = tti_operator(dse='basic')
+    rec, u, v, _ = operator.forward()
+
+    assert np.allclose(tti_nodse[0].data, v.data, atol=10e-3)
+    assert np.allclose(tti_nodse[1].data, rec.data, atol=10e-3)
+
+
+@skipif_yask
+def test_tti_rewrite_skewing(tti_nodse):
+    operator = tti_operator(dse='skewing', dle='noop')
     rec, u, v, _ = operator.forward()
 
     assert np.allclose(tti_nodse[0].data, v.data, atol=10e-3)
