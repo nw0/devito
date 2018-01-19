@@ -331,7 +331,7 @@ class Operator(Callable):
                 for j in needed:
                     limits = j.dim.limits
                     if j.dim in i.skewed_loops:
-                        limits = [l - i.skewed_loops[j.dim] for l in limits]
+                        limits = (limits[0] - i.skewed_loops[j.dim], limits[1] - i.skewed_loops[j.dim], limits[2])
                     iters.append(Iteration([], j.dim, limits, offsets=j.ofs))
                 body, tree = compose_nodes(iters + [expressions], retrieve=True)
                 scheduling = OrderedDict(zip(needed, tree))
