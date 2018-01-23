@@ -160,7 +160,7 @@ class DevitoRewriter(BasicRewriter):
                 dim = blocked.setdefault(i, Dimension(name))
                 block_size = dim.symbolic_size
                 start = i.limits[0] - i.offsets[0]  # FIXME: "widen"
-                finish = i.dim.symbolic_end - i.offsets[1]  # FIXME
+                finish = i.limits[1] - i.offsets[1]  # FIXME
 
                 inter_block = Iteration([], dim, [start, finish, block_size],
                                         properties=PARALLEL)
