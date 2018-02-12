@@ -256,7 +256,7 @@ class Iteration(Node):
     _traversable = ['nodes']
 
     def __init__(self, nodes, dimension, limits, index=None, offsets=None,
-                 properties=None, pragmas=None, uindices=None):
+                 properties=None, pragmas=None, uindices=None, skew=None):
         # Ensure we deal with a list of Expression objects internally
         nodes = as_tuple(nodes)
         self.nodes = as_tuple([n if isinstance(n, Node) else Expression(n)
@@ -289,6 +289,8 @@ class Iteration(Node):
         self.pragmas = as_tuple(pragmas)
         self.uindices = as_tuple(uindices)
         assert all(isinstance(i, UnboundedIndex) for i in self.uindices)
+
+        self.skew = skew if skew else 0
 
     def __repr__(self):
         properties = ""

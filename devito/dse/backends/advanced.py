@@ -175,7 +175,7 @@ class SkewingRewriter(AdvancedRewriter):
 
     @dse_pass
     def _loop_skew(self, cluster, template, **kwargs):
-        skew_factor = -2 # FIXME: read parameter
+        skew_factor = -2  # FIXME: read parameter
         t, mapper = None, {}
 
         # FIXME: this is probably the wrong way to find the time dimension
