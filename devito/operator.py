@@ -331,11 +331,12 @@ class Operator(Callable):
                 for j in needed:
                     limits = j.dim.limits
                     if j.dim in i.skewed_loops:
-                        limits = (limits[0] - i.skewed_loops[j.dim], limits[1] - i.skewed_loops[j.dim], limits[2])
-                        skew = i.skewed_loops[j.dim]
+                        skew_tuple = i.skewed_loops[j.dim]
+                        skew = skew_tuple[0] * skew_tuple[1]
+                        limits = (limits[0] - skew, limits[1] - skew, limits[2])
                     else:
-                        skew = 0
-                    iters.append(Iteration([], j.dim, limits, offsets=j.ofs, skew=skew))
+                        skew_tuple = 0
+                    iters.append(Iteration([], j.dim, limits, offsets=j.ofs, skew=skew_tuple))
                 body, tree = compose_nodes(iters + [expressions], retrieve=True)
                 scheduling = OrderedDict(zip(needed, tree))
                 if root is None:

@@ -177,17 +177,19 @@ class SkewingRewriter(AdvancedRewriter):
     def _loop_skew(self, cluster, template, **kwargs):
         skew_factor = -2  # FIXME: read parameter
         t, mapper = None, {}
+        skews = {}
 
         # FIXME: this is probably the wrong way to find the time dimension
         for dim in cluster.stencil.dimensions:
             if t is not None:
                 mapper[dim] = dim + skew_factor * t
+                skews[dim] = (skew_factor, t)
             elif dim.is_Time:
                 t = dim.parent
 
         if t is None:
             return cluster
 
-        cluster.skewed_loops = {dim: skew - dim for dim, skew in mapper.items()}
+        cluster.skewed_loops = skews
         processed = xreplace_indices(cluster.exprs, mapper)
         return cluster.rebuild(processed)

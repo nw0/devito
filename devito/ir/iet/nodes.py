@@ -290,7 +290,8 @@ class Iteration(Node):
         self.uindices = as_tuple(uindices)
         assert all(isinstance(i, UnboundedIndex) for i in self.uindices)
 
-        self.skew = skew if skew else 0
+        # If there is no skewing factor, want to insert a dummy dimension
+        self.skew = skew if skew else (0, self.dim)
 
     def __repr__(self):
         properties = ""
