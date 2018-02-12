@@ -136,6 +136,15 @@ def test_tti_rewrite_basic(tti_nodse):
 
 
 @skipif_yask
+def test_dle_tiling(tti_nodse):
+    operator = tti_operator(dse='skewing', dle='advanced')
+    rec, u, v, _ = operator.forward()
+
+    assert np.allclose(tti_nodse[0].data, v.data, atol=10e-3)
+    assert np.allclose(tti_nodse[1].data, rec.data, atol=10e-3)
+
+
+@skipif_yask
 def test_tti_rewrite_skewing(tti_nodse):
     operator = tti_operator(dse='skewing', dle='noop')
     rec, u, v, _ = operator.forward()
