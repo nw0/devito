@@ -8,7 +8,7 @@ from itertools import combinations
 import cgen
 import numpy as np
 import psutil
-from sympy import Min
+from sympy import Min, Max
 
 from devito.cgen_utils import ccode
 from devito.dimension import Dimension
@@ -164,11 +164,11 @@ class DevitoRewriter(BasicRewriter):
 
                 inter_block = Iteration([], dim, [start, finish, block_size],
                                         properties=PARALLEL)
-                inter_blocks.append(inter_block)
+                inter_blocks.append(inter_block)  # the area being blocked
 
                 # Build Iteration within a block
-                start = inter_block.dim
-                finish = Min(start + block_size, finish)  # FIXME: "widen", FIXME: + eps?
+                start = Max(inter_block.dim, start)
+                finish = Min(inter_block.dim + block_size, finish)
                 intra_block = i._rebuild([], limits=[start, finish, 1], offsets=None,
                                          properties=i.properties + (TAG, ELEMENTAL))
                 intra_blocks.append(intra_block)
