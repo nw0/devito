@@ -158,11 +158,16 @@ class DevitoRewriter(BasicRewriter):
 
                 # Build Iteration over blocks
                 dim = blocked.setdefault(i, Dimension(name))
-                block_size = dim.symbolic_size
-                start = i.limits[0] - i.offsets[0]  # FIXME: "widen"
-                finish = i.limits[1] - i.offsets[1]  # FIXME
+                block_size = dim.symbolic_size  # The variable which will contain the block size
+                # FIXME: what if the time dimension doesn't start at 0?
+                # We subtract the skew here to straighten out the blocks
+                start = i.limits[0] - i.offsets[0]
+                finish = i.limits[1] - i.offsets[1]
 
-                inter_block = Iteration([], dim, [start, finish, block_size],
+                # FIXME: these bounds might be a little fishy
+                outer_start = start + i.skew[0] * i.skew[1]
+                outer_finish = finish + i.skew[0] * i.skew[1] - i.skew[0] * i.skew[1].symbolic_end
+                inter_block = Iteration([], dim, [outer_start, outer_finish, block_size],
                                         properties=PARALLEL)
                 inter_blocks.append(inter_block)  # the area being blocked
 
