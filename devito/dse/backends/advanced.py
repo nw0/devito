@@ -167,15 +167,15 @@ class AdvancedRewriter(BasicRewriter):
 class SkewingRewriter(AdvancedRewriter):
 
     def _pipeline(self, state):
+        self._loop_skew(state)
         self._extract_time_invariants(state)
         self._eliminate_inter_stencil_redundancies(state)
         self._eliminate_intra_stencil_redundancies(state)
         self._factorize(state)
-        self._loop_skew(state)
 
     @dse_pass
     def _loop_skew(self, cluster, template, **kwargs):
-        skew_factor = -2  # FIXME: read parameter
+        skew_factor = -1  # FIXME: read parameter
         t, mapper = None, {}
         skews = {}
 
