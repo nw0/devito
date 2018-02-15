@@ -141,7 +141,7 @@ def _new_operator3(shape, time_order, **kwargs):
 
     # Allocate the grid and set initial condition
     # Note: This should be made simpler through the use of defaults
-    u = TimeFunction(name='u', grid=grid, time_order=1, space_order=2)
+    u = TimeFunction(name='u', grid=grid, time_order=time_order, space_order=2)
     u.data[0, :] = np.arange(reduce(mul, shape), dtype=np.int32).reshape(shape)
 
     # Derive the stencil according to devito conventions
@@ -372,6 +372,30 @@ def test_cache_blocking_edge_cases(shape, blockshape):
 def test_cache_blocking_edge_cases_highorder(shape, blockshape):
     wo_blocking, _ = _new_operator3(shape, time_order=2, dle='noop')
     w_blocking, _ = _new_operator3(shape, time_order=2,
+                                   dle=('blocking', {'blockshape': blockshape,
+                                                     'blockinner': True}))
+    assert np.equal(wo_blocking.data, w_blocking.data).all()
+
+
+@skipif_yask
+@pytest.mark.parametrize("shape,blockshape", [
+    ((3, 3), (3, 4)),
+    ((4, 4), (3, 4)),
+    ((5, 5), (3, 4)),
+    ((6, 6), (3, 4)),
+    ((7, 7), (3, 4)),
+    ((8, 8), (3, 4)),
+    ((9, 9), (3, 4)),
+    ((10, 10), (3, 4)),
+    ((11, 11), (3, 4)),
+    ((12, 12), (3, 4)),
+    ((13, 13), (3, 4)),
+    ((14, 14), (3, 4)),
+    ((15, 15), (3, 4))
+])
+def test_time_blocking(shape, blockshape):
+    wo_blocking, _ = _new_operator3(shape, time_order=2, dle='noop')
+    w_blocking, _ = _new_operator3(shape, time_order=2, dse='skewing',
                                    dle=('blocking', {'blockshape': blockshape,
                                                      'blockinner': True}))
     assert np.equal(wo_blocking.data, w_blocking.data).all()
