@@ -5,6 +5,7 @@ from collections import OrderedDict
 from devito.ir import clusterize
 from devito.dse.aliases import collect
 from devito.dse.backends import BasicRewriter, dse_pass
+from devito.parameters import configuration
 from devito.symbolics import Eq, estimate_cost, xreplace_constrained, iq_timeinvariant, xreplace_indices
 from devito.dse.manipulation import (common_subexprs_elimination, collect_nested,
                                      compact_temporaries)
@@ -175,7 +176,7 @@ class SkewingRewriter(AdvancedRewriter):
 
     @dse_pass
     def _loop_skew(self, cluster, template, **kwargs):
-        skew_factor = -1  # FIXME: read parameter
+        skew_factor = -configuration['skew_factor']
         t, mapper = None, {}
         skews = {}
 

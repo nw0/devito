@@ -19,7 +19,11 @@ modes = {
 }
 """The DSE transformation modes."""
 
+# FIXME: unsure what this should be
+MAX_SKEW_FACTOR = 8
+
 configuration.add('dse', 'advanced', list(modes))
+configuration.add('skew_factor', 0, range(MAX_SKEW_FACTOR))
 
 
 def rewrite(clusters, mode='advanced'):
