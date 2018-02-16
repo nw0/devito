@@ -9,6 +9,7 @@ from sympy import solve
 
 from conftest import EVAL
 
+from devito import configuration
 from devito.dle import transform
 from devito.dle.backends import DevitoRewriter as Rewriter
 from devito import Grid, Function, TimeFunction, Eq, Operator
@@ -394,11 +395,15 @@ def test_cache_blocking_edge_cases_highorder(shape, blockshape):
     ((15, 15), (3, 4))
 ])
 def test_time_blocking(shape, blockshape):
+    prev = configuration['skew_factor'] if 'skew_factor' in configuration else 0
+    configuration['skew_factor'] = 2
     wo_blocking, _ = _new_operator3(shape, time_order=2, dle='noop')
     w_blocking, _ = _new_operator3(shape, time_order=2, dse='skewing',
-                                   dle=('blocking', {'blockshape': blockshape,
-                                                     'blockinner': True}))
+                                   dle=('blocking,openmp',
+                                        {'blockshape': blockshape,
+                                         'blockinner': True}))
     assert np.equal(wo_blocking.data, w_blocking.data).all()
+    configuration['skew_factor'] = prev
 
 
 @skipif_yask

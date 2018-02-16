@@ -24,6 +24,7 @@ from devito.ir.iet import (Block, Expression, Iteration, List,
                            retrieve_iteration_tree, filter_iterations,
                            copy_arrays, SEQUENTIAL)
 from devito.logger import dle_warning
+from devito.parameters import configuration
 from devito.tools import as_tuple, grouper, roundm
 from devito.types import Array, Scalar
 
@@ -131,7 +132,12 @@ class DevitoRewriter(BasicRewriter):
         blocked = OrderedDict()
         for tree in retrieve_iteration_tree(fold):
             # Is the Iteration tree blockable ?
-            iterations = [i for i in tree if i.is_Parallel]
+            # FIXME: change mark_parallel ensure skewed loops are is_Parallel
+            if configuration['skew_factor']:
+                iterations = tree
+            else:
+                iterations = [i for i in tree if i.is_Parallel]
+
             if exclude_innermost:
                 iterations = [i for i in iterations if not i.is_Vectorizable]
             if len(iterations) <= 1:
@@ -168,8 +174,7 @@ class DevitoRewriter(BasicRewriter):
                 # FIXME: these bounds might be a little fishy
                 outer_start = start + i.skew[0] * i.skew[1]
                 outer_finish = finish + i.skew[0] * i.skew[1] - i.skew[0] * i.skew[1].symbolic_end
-                inter_block = Iteration([], dim, [outer_start, outer_finish, block_size],
-                                        properties=PARALLEL)
+                inter_block = Iteration([], dim, [outer_start, outer_finish, block_size])
                 inter_blocks.append(inter_block)  # the area being blocked
 
                 # Build Iteration within a block
