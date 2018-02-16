@@ -8,7 +8,7 @@ from itertools import combinations
 import cgen
 import numpy as np
 import psutil
-from sympy import Min, Max
+from sympy import Eq, Min, Max
 
 from devito.cgen_utils import ccode
 from devito.dimension import Dimension
@@ -21,10 +21,11 @@ from devito.ir.iet import (Block, Expression, Iteration, List,
                            PARALLEL, ELEMENTAL, REMAINDER, tagger,
                            FindNodes, FindSymbols, IsPerfectIteration,
                            SubstituteExpression, Transformer, compose_nodes,
-                           retrieve_iteration_tree, filter_iterations, copy_arrays)
+                           retrieve_iteration_tree, filter_iterations,
+                           copy_arrays, SEQUENTIAL)
 from devito.logger import dle_warning
 from devito.tools import as_tuple, grouper, roundm
-from devito.types import Array
+from devito.types import Array, Scalar
 
 
 class DevitoRewriter(BasicRewriter):
@@ -36,7 +37,7 @@ class DevitoRewriter(BasicRewriter):
         self._simdize(state)
         if self.params['openmp'] is True:
             self._ompize(state)
-        self._create_elemental_functions(state)
+        # self._create_elemental_functions(state)
         self._minimize_remainders(state)
 
     @dle_pass
@@ -173,9 +174,16 @@ class DevitoRewriter(BasicRewriter):
 
                 # Build Iteration within a block
                 start = Max(inter_block.dim, start)
-                finish = Min(inter_block.dim + block_size, finish)
-                intra_block = i._rebuild([], limits=[start, finish, 1], offsets=None,
-                                         properties=i.properties + (TAG, ELEMENTAL))
+                ub = Min(inter_block.dim + block_size, finish)
+                if i.is_Parallel:
+                    q = Scalar(name='%s_ub' % i.dim.name)
+                    intra_blocks.append(Expression(Eq(q, ub), np.dtype(np.int32)))
+                    properties = [p for p in i.properties if p != SEQUENTIAL] + [PARALLEL, TAG]
+                else:
+                    q = ub
+                    properties = i.properties + (TAG, ELEMENTAL)
+                intra_block = i._rebuild([], limits=[start, q, 1], offsets=None,
+                                         properties=properties)
                 intra_blocks.append(intra_block)
 
             # Build blocked Iteration nest

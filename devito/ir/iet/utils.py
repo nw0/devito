@@ -112,7 +112,15 @@ def compose_nodes(nodes, retrieve=False):
         body = l.pop(-1)
         while l:
             handle = l.pop(-1)
-            body = handle._rebuild(body, **handle.args_frozen)
+            # The original code assumed nested loops only, and we wanted
+            #  to handle [Iteration, Expression, Iteration, ...]
+            # See DevitoRewriter._loop_blocking()
+            # Easy to abuse (think of perfect loop nests)
+            # FIXME: can only handle one expression before an iteration
+            if isinstance(handle, Expression) and isinstance(body, Iteration):
+                body = (handle, body)
+            else:
+                body = handle._rebuild(body, **handle.args_frozen)
             tree.append(body)
 
     if retrieve is True:
