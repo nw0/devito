@@ -12,11 +12,14 @@ from operator import attrgetter
 
 import cgen as c
 import numpy as np
+from sympy import Max, Min, Eq
 
 from devito.cgen_utils import blankline, ccode
-from devito.dimension import LoweredDimension
+from devito.dimension import LoweredDimension, Dimension
 from devito.exceptions import VisitorException
-from devito.ir.iet.nodes import Iteration, Node, UnboundedIndex
+from devito.ir.iet import tagger, SEQUENTIAL, PARALLEL, ELEMENTAL
+from devito.ir.iet.nodes import Iteration, Node, UnboundedIndex, Expression, \
+    List
 from devito.types import Scalar
 from devito.tools import as_tuple, filter_ordered, filter_sorted, flatten, ctypes_to_C
 
@@ -24,7 +27,8 @@ from devito.tools import as_tuple, filter_ordered, filter_sorted, flatten, ctype
 __all__ = ['FindNodes', 'FindSections', 'FindSymbols', 'MapExpressions',
            'IsPerfectIteration', 'SubstituteExpression', 'printAST', 'CGen',
            'ResolveTimeStepping', 'Transformer', 'NestedTransformer',
-           'FindAdjacentIterations', 'MergeOuterIterations', 'MapIteration']
+           'FindAdjacentIterations', 'MergeOuterIterations', 'MapIteration',
+           'BlockIterations']
 
 
 class Visitor(object):
@@ -802,6 +806,70 @@ class MergeOuterIterations(Transformer):
                 ret = self.visit([newit] + list(body[1:]))
                 return as_tuple(ret)
         return tuple([head] + list(body))
+
+    visit_tuple = visit_list
+
+
+class BlockIterations(Visitor):
+    """
+    Tile an iteration tree, given a condition.
+    """
+
+    def __init__(self, tag, condition=lambda _: True):
+        super(BlockIterations, self).__init__()
+        self.TAG = tagger(tag)
+        self.tag = tag
+        self.condition = condition
+        self.inter_blocks = []
+        self.blocked = {}
+
+    def visit_Block(self, o):
+        #rebuilt = [self.visit(i) for i in o.children]
+        rebuilt = self.visit(o.children)
+        return o._rebuild(*rebuilt, **o.args_frozen)
+
+    def visit_Iteration(self, o):
+        if not self.condition(o):
+            return o._rebuild(*self.visit(o.children), **o.args_frozen)
+
+        # Do the actual blocking
+        name = "%s%d_block" % (o.dim.name, self.tag)
+        dim = self.blocked.setdefault(o, Dimension(name))
+        block_size = dim.symbolic_size
+
+        # FIXME: what if the time dimension doesn't start at 0?
+        # We subtract the skew here to straighten out the blocks
+        dim_start = o.limits[0] - o.offsets[0]
+        dim_finish = o.limits[1] - o.offsets[1]
+
+        skew = o.skew[0] * o.skew[1]
+        skew_max = o.skew[0] * o.skew[1].symbolic_end
+
+        outer_start = dim_start + skew
+        outer_finish = dim_finish + skew - skew_max
+        inter_block = Iteration([], dim, [outer_start, outer_finish, block_size])
+        self.inter_blocks.append(inter_block)
+
+        inner_start = Max(inter_block.dim, dim_start)
+        upper_bound = Min(inter_block.dim + block_size, dim_finish)
+        inner_finish = Scalar(name="%s_ub" % o.dim.name)
+        ub_expr = Expression(Eq(inner_finish, upper_bound), np.dtype(np.int32))
+        if o.is_Parallel:
+            properties = [p for p in o.properties if p != SEQUENTIAL] + [PARALLEL, self.TAG]
+        else:
+            properties = o.properties + (self.TAG, ELEMENTAL)
+
+        rebuilt = self.visit(o.children)
+        i = o._rebuild(*rebuilt, limits=[inner_start, inner_finish, 1],
+                       offsets=None, properties=properties)
+        return List(body=(ub_expr, i))
+
+    def visit_Expression(self, o):
+        return o
+
+    def visit_list(self, o):
+        rebuilt = [self.visit(i) for i in o]
+        return rebuilt
 
     visit_tuple = visit_list
 

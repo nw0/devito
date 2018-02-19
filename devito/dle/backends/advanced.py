@@ -3,30 +3,26 @@
 from __future__ import absolute_import
 
 from collections import OrderedDict
-from itertools import combinations
 
 import cgen
 import numpy as np
 import psutil
-from sympy import Eq, Min, Max
 
 from devito.cgen_utils import ccode
-from devito.dimension import Dimension
 from devito.dle import fold_blockable_tree, unfold_blocked_tree
 from devito.dle.backends import (BasicRewriter, BlockingArg, dle_pass, omplang,
                                  simdinfo, get_simd_flag, get_simd_items)
 from devito.dse import promote_scalar_expressions
 from devito.exceptions import DLEException
-from devito.ir.iet import (Block, Expression, Iteration, List,
-                           PARALLEL, ELEMENTAL, REMAINDER, tagger,
+from devito.ir.iet import (Block, Expression, Iteration, List, ELEMENTAL,
                            FindNodes, FindSymbols, IsPerfectIteration,
                            SubstituteExpression, Transformer, compose_nodes,
                            retrieve_iteration_tree, filter_iterations,
-                           copy_arrays, SEQUENTIAL)
+                           copy_arrays, BlockIterations)
 from devito.logger import dle_warning
 from devito.parameters import configuration
 from devito.tools import as_tuple, grouper, roundm
-from devito.types import Array, Scalar
+from devito.types import Array
 
 
 class DevitoRewriter(BasicRewriter):
@@ -153,47 +149,13 @@ class DevitoRewriter(BasicRewriter):
                 # sequential loop (e.g., a timestepping loop)
                 continue
 
-            # Decorate intra-block iterations with an IterationProperty
-            TAG = tagger(len(mapper))
-
-            # Build all necessary Iteration objects, individually. These will
-            # subsequently be composed to implement loop blocking.
-            inter_blocks = []
-            intra_blocks = []
-            for i in iterations:
-                name = "%s%d_block" % (i.dim.name, len(mapper))
-
-                # Build Iteration over blocks
-                dim = blocked.setdefault(i, Dimension(name))
-                block_size = dim.symbolic_size  # The variable which will contain the block size
-                # FIXME: what if the time dimension doesn't start at 0?
-                # We subtract the skew here to straighten out the blocks
-                start = i.limits[0] - i.offsets[0]
-                finish = i.limits[1] - i.offsets[1]
-
-                # FIXME: these bounds might be a little fishy
-                outer_start = start + i.skew[0] * i.skew[1]
-                outer_finish = finish + i.skew[0] * i.skew[1] - i.skew[0] * i.skew[1].symbolic_end
-                inter_block = Iteration([], dim, [outer_start, outer_finish, block_size])
-                inter_blocks.append(inter_block)  # the area being blocked
-
-                # Build Iteration within a block
-                start = Max(inter_block.dim, start)
-                ub = Min(inter_block.dim + block_size, finish)
-                if i.is_Parallel:
-                    q = Scalar(name='%s_ub' % i.dim.name)
-                    intra_blocks.append(Expression(Eq(q, ub), np.dtype(np.int32)))
-                    properties = [p for p in i.properties if p != SEQUENTIAL] + [PARALLEL, TAG]
-                else:
-                    q = ub
-                    properties = i.properties + (TAG, ELEMENTAL)
-                intra_block = i._rebuild([], limits=[start, q, 1], offsets=None,
-                                         properties=properties)
-                intra_blocks.append(intra_block)
-
-            # Build blocked Iteration nest
-            blocked_tree = compose_nodes(inter_blocks + intra_blocks +
-                                         [iterations[-1].nodes])
+            condition = lambda i: (i in iterations)
+            tag = len(mapper)
+            blocker =  BlockIterations(tag, condition=condition)
+            intra_blocks = blocker.visit(root)
+            inter_blocks = blocker.inter_blocks
+            blocked = blocker.blocked
+            blocked_tree = compose_nodes(inter_blocks + [intra_blocks])
 
             # Will replace with blocked loop tree
             mapper[root] = List(body=[blocked_tree])
