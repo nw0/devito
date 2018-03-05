@@ -2,6 +2,7 @@ from __future__ import absolute_import
 
 from collections import OrderedDict
 
+from devito.dimension import TimeDimension
 from devito.ir import clusterize
 from devito.dse.aliases import collect
 from devito.dse.backends import BasicRewriter, dse_pass
@@ -186,7 +187,10 @@ class SkewingRewriter(AdvancedRewriter):
                 mapper[dim] = dim + skew_factor * t
                 skews[dim] = (skew_factor, t)
             elif dim.is_Time:
-                t = dim.parent
+                if isinstance(dim, TimeDimension):
+                    t = dim
+                elif isinstance(dim.parent, TimeDimension):
+                    t = dim.parent
 
         if t is None:
             return cluster
