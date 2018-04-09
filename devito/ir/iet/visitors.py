@@ -850,10 +850,14 @@ class BlockIterations(Visitor):
         inter_block = Iteration([], dim, [outer_start, outer_finish, block_size])
         self.inter_blocks.append(inter_block)
 
-        inner_start = Max(inter_block.dim, dim_start)
+        lower_bound = Max(inter_block.dim, dim_start)
+        inner_start = Scalar(name="%s_lb" % o.dim.name)
+        lb_expr = Expression(Eq(inner_start, lower_bound), np.dtype(np.int32))
+
         upper_bound = Min(inter_block.dim + block_size, dim_finish)
         inner_finish = Scalar(name="%s_ub" % o.dim.name)
         ub_expr = Expression(Eq(inner_finish, upper_bound), np.dtype(np.int32))
+
         if o.is_Parallel:
             properties = [p for p in o.properties if p != SEQUENTIAL] + [PARALLEL, self.TAG]
         else:
@@ -862,7 +866,7 @@ class BlockIterations(Visitor):
         rebuilt = self.visit(o.children)
         i = o._rebuild(*rebuilt, limits=[inner_start, inner_finish, 1],
                        offsets=None, properties=properties)
-        return List(body=(ub_expr, i))
+        return List(body=(lb_expr, ub_expr, i))
 
     def visit_Expression(self, o):
         return o
