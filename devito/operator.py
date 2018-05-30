@@ -193,6 +193,7 @@ class Operator(Callable):
         dim_sizes.update(dle_arguments)
 
         autotune = autotune and kwargs.pop('autotune', False)
+        kwargs.pop('autotune', False)
 
         # Make sure we've used all arguments passed
         if len(kwargs) > 0:
