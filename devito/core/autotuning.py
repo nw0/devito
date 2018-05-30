@@ -53,16 +53,39 @@ def autotune(operator, arguments, tunable):
 
     # Attempted block sizes ...
     mapper = OrderedDict([(i.argument.symbolic_size.name, i) for i in tunable])
+    time_dim = None
+    for i, d in mapper.items():
+        if d.original_dim.is_Time:
+            time_dim = i
+
     # ... Defaults (basic mode)
-    blocksizes = [OrderedDict([(i, v) for i in mapper]) for v in options['at_blocksize']]
+    blocksizes = [OrderedDict([(i, v) for i in mapper if not mapper[i].original_dim.is_Time]) for v in options['at_blocksize']]  # cubes
     # ... Always try the entire iteration space (degenerate block)
     datashape = [at_arguments[mapper[i].original_dim.symbolic_end.name] -
                  at_arguments[mapper[i].original_dim.symbolic_start.name] for i in mapper]
     blocksizes.append(OrderedDict([(i, mapper[i].iteration.extent(0, j))
-                      for i, j in zip(mapper, datashape)]))
+                      for i, j in zip(mapper, datashape)]))  # degenerate block
     # ... More attempts if auto-tuning in aggressive mode
     if configuration.core['autotuning'] == 'aggressive':
+        last_dim = None
+        innermost = iterations[-1].dim
+        for k, v in mapper.items():
+            if v.original_dim == innermost:
+                last_dim = (k, blocksizes[-1][k])
+
         blocksizes = more_heuristic_attempts(blocksizes)
+
+        if last_dim:
+            info_at("Extending the innermost dimension, %s <%s>" % (last_dim[0], last_dim[1]))
+            intermediate_blocks = [OrderedDict([(i, v) for i in mapper if not (mapper[i].original_dim.is_Time or mapper[i].original_dim == innermost)])
+                                   for v in options['at_blocksize']]
+            intermediate_blocks = more_heuristic_attempts(intermediate_blocks)
+            blocksizes += cross_time_tiles(intermediate_blocks, last_dim[0], [last_dim[1]])
+            # TODO: don't extend this: run generator for 2 dims, then extend that
+
+    if time_dim:
+        blocksizes = cross_time_tiles(blocksizes, time_dim, [1, 2, 4, 8, 16])
+
 
     # How many temporaries are allocated on the stack?
     # Will drop block sizes that might lead to a stack overflow
@@ -74,7 +97,14 @@ def autotune(operator, arguments, tunable):
     # Note: there is only a single loop over 'blocksize' because only
     # square blocks are tested
     timings = OrderedDict()
+    fastest, timing = None, float("inf")
+    unique = []
+
     for bs in blocksizes:
+        if bs in unique:
+            continue
+        unique.append(bs)
+
         illegal = False
         for k, v in at_arguments.items():
             if k in bs:
@@ -115,12 +145,16 @@ def autotune(operator, arguments, tunable):
         operator.cfunction(*list(at_arguments.values()))
         elapsed = sum(operator.profiler.timings.values())
         timings[tuple(bs.items())] = elapsed
+        if elapsed < timing:
+            fastest = tuple(bs.items())
+            timing = elapsed
         info_at("Block shape <%s> took %f (s) in %d time steps" %
                 (','.join('%d' % i for i in bs.values()), elapsed, timesteps))
 
     try:
-        best = dict(min(timings, key=timings.get))
-        info("Auto-tuned block shape: %s" % best)
+        # best = dict(min(timings, key=timings.get))
+        best = dict(fastest)
+        info("Auto-tuned block shape: %s; time: %f (s)" % (best, timing))
     except ValueError:
         info("Auto-tuning request, but couldn't find legal block sizes")
         return arguments
@@ -140,6 +174,7 @@ def autotune(operator, arguments, tunable):
 def more_heuristic_attempts(blocksizes):
     # Ramp up to higher block sizes
     handle = OrderedDict([(i, options['at_blocksize'][-1]) for i in blocksizes[0]])
+    # insert more cubes
     for i in range(3):
         new_bs = OrderedDict([(k, v*2) for k, v in handle.items()])
         blocksizes.insert(blocksizes.index(handle) + 1, new_bs)
@@ -152,22 +187,30 @@ def more_heuristic_attempts(blocksizes):
             handle.append(OrderedDict(list(bs.items())[:-1] + [list(i.items())[-1]]))
     # Some more shuffling for all block sizes
     for bs in list(blocksizes):
-        ncombs = len(bs)
+        ncombs = len(bs)  # dimensions to tile over
         for i in range(ncombs):
             for j in combinations(bs, i+1):
                 item = [(k, bs[k]*2 if k in j else v) for k, v in bs.items()]
                 handle.append(OrderedDict(item))
 
-    unique = []
-    for i in blocksizes + handle:
-        if i not in unique:
-            unique.append(i)
+    return blocksizes + handle
 
-    return unique
+
+def extend_dimension(blocksizes, dim, size):
+    return blocksizes + [OrderedDict([(dim, size) if dim == d else (d, s) for d, s in bs.items()]) for bs in blocksizes]
+
+
+def cross_time_tiles(blocksizes, dim, tiles):
+    extended = []
+    for bs in blocksizes:
+        for tile in tiles:
+            extended.append(OrderedDict([(dim, tile)] + list(bs.items())))
+
+    return extended
 
 
 options = {
-    'at_squeezer': 5,
+    'at_squeezer': 17,
     'at_blocksize': sorted({8, 16, 24, 32, 40, 64, 128}),
     'at_stack_limit': resource.getrlimit(resource.RLIMIT_STACK)[0] / 4
 }
