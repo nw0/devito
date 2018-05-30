@@ -5,7 +5,7 @@ import numpy as np
 import pytest
 from conftest import x, y, z, time, skipif_yask  # noqa
 
-from devito import Eq  # noqa
+from devito import configuration
 from devito.ir import Stencil, clusterize, TemporariesGraph
 from devito.dse import rewrite, common_subexprs_elimination, collect
 from devito.symbolics import (xreplace_constrained, iq_timeinvariant, iq_timevarying,
@@ -135,22 +135,30 @@ def test_tti_rewrite_basic(tti_nodse):
     assert np.allclose(tti_nodse[1].data, rec.data, atol=10e-3)
 
 
+# Time-tiling vs dse=None,space-tiling
 @skipif_yask
 def test_dle_tiling(tti_nodse):
+    prev = configuration['skew_factor'] if 'skew_factor' in configuration else 0
+    configuration['skew_factor'] = 2
     operator = tti_operator(dse='skewing', dle='advanced')
     rec, u, v, _ = operator.forward()
 
     assert np.allclose(tti_nodse[0].data, v.data, atol=10e-3)
     assert np.allclose(tti_nodse[1].data, rec.data, atol=10e-3)
+    configuration['skew_factor'] = prev
 
 
+# Skewed only vs. dse=None,dle=advanced (i.e. space-tiling)
 @skipif_yask
 def test_tti_rewrite_skewing(tti_nodse):
-    operator = tti_operator(dse='skewing')
+    prev = configuration['skew_factor'] if 'skew_factor' in configuration else 0
+    configuration['skew_factor'] = 2
+    operator = tti_operator(dse='skewing', dle=None)
     rec, u, v, _ = operator.forward()
 
-    assert np.allclose(tti_nodse[0].data, v.data, atol=10e-3)
-    assert np.allclose(tti_nodse[1].data, rec.data, atol=10e-3)
+    assert np.allclose(tti_nodse[0].data, v.data, atol=10e-1)
+    assert np.allclose(tti_nodse[1].data, rec.data, atol=10e-1)
+    configuration['skew_factor'] = prev
 
 
 @skipif_yask
