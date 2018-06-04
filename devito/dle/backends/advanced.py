@@ -151,7 +151,7 @@ class DevitoRewriter(BasicRewriter):
 
             condition = lambda i: (i in iterations)
             tag = len(mapper)
-            blocker =  BlockIterations(tag, condition=condition)
+            blocker =  BlockIterations(tag, blocked, condition=condition)
             intra_blocks = blocker.visit(root)
             inter_blocks = blocker.inter_blocks
             blocked = blocker.blocked

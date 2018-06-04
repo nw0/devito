@@ -815,13 +815,13 @@ class BlockIterations(Visitor):
     Tile an iteration tree, given a condition.
     """
 
-    def __init__(self, tag, condition=lambda _: True):
+    def __init__(self, tag, blocked, condition=lambda _: True):
         super(BlockIterations, self).__init__()
         self.TAG = tagger(tag)
         self.tag = tag
         self.condition = condition
         self.inter_blocks = []
-        self.blocked = {}
+        self.blocked = blocked
 
     def visit_Block(self, o):
         #rebuilt = [self.visit(i) for i in o.children]
