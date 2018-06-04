@@ -380,6 +380,33 @@ def test_cache_blocking_edge_cases_highorder(shape, blockshape):
 
 @skipif_yask
 @pytest.mark.parametrize("shape,blockshape", [
+    ((25, 25, 46), (None, None, None)),
+    ((25, 25, 46), (7, None, None)),
+    ((25, 25, 46), (None, None, 7)),
+    ((25, 25, 46), (None, 7, None)),
+    ((25, 25, 46), (5, None, 7)),
+    ((25, 25, 46), (10, 3, None)),
+    ((25, 25, 46), (None, 7, 11)),
+    ((25, 25, 46), (8, 2, 4)),
+    ((25, 25, 46), (2, 4, 8)),
+    ((25, 25, 46), (4, 8, 2)),
+    ((25, 46), (None, 7)),
+    ((25, 46), (7, None))
+])
+def test_time_blocking_edge_cases(shape, blockshape):
+    prev = configuration['skew_factor'] if 'skew_factor' in configuration else 0
+    configuration['skew_factor'] = 2
+    wo_blocking, _ = _new_operator2(shape, time_order=2, dle='noop')
+    w_blocking, _ = _new_operator2(shape, time_order=2, dse='skewing',
+                                   dle=('blocking,openmp',
+                                        {'blockshape': blockshape,
+                                         'blockinner': True}))
+    assert np.equal(wo_blocking.data, w_blocking.data).all()
+    configuration['skew_factor'] = prev
+
+
+@skipif_yask
+@pytest.mark.parametrize("shape,blockshape", [
     ((3, 3), (3, 4)),
     ((4, 4), (3, 4)),
     ((5, 5), (3, 4)),
