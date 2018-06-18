@@ -7,8 +7,9 @@ from itertools import combinations
 
 import cgen
 import numpy as np
+from sympy import Max, Min
 
-from devito.cgen_utils import ccode
+from devito.cgen_utils import ccode, INT
 from devito.dimension import Dimension
 from devito.dle import fold_blockable_tree, unfold_blocked_tree
 from devito.dle.backends import (BasicRewriter, BlockingArg, Ompizer, dle_pass,
@@ -98,47 +99,25 @@ class AdvancedRewriter(BasicRewriter):
                 dim = blocked.setdefault(i, Dimension(name=name))
                 bsize = dim.symbolic_size
                 bstart = i.limits[0]
-                binnersize = i.symbolic_extent + (i.offsets[1] - i.offsets[0])
-                bfinish = i.dim.symbolic_end - (binnersize % bsize)
+                bfinish = i.limits[1]
                 inter_block = Iteration([], dim, [bstart, bfinish, bsize],
                                         offsets=i.offsets, properties=PARALLEL)
                 inter_blocks.append(inter_block)
 
                 # Build Iteration within a block
-                limits = (dim, dim + bsize - 1, 1)
+                intra_start = INT(Max(inter_block.dim, bstart))
+                intra_finish = INT(Min(inter_block.dim + bsize - 1, bfinish))
+                limits = (intra_start, intra_finish, 1)
                 intra_block = i._rebuild([], limits=limits, offsets=(0, 0),
                                          properties=i.properties + (TAG, ELEMENTAL))
                 intra_blocks.append(intra_block)
-
-                # Build unitary-increment Iteration over the 'leftover' region.
-                # This will be used for remainder loops, executed when any
-                # dimension size is not a multiple of the block size.
-                remainder = i._rebuild([], limits=[bfinish + 1, i.dim.symbolic_end, 1],
-                                       offsets=(i.offsets[1], i.offsets[1]))
-                remainders.append(remainder)
 
             # Build blocked Iteration nest
             blocked_tree = compose_nodes(inter_blocks + intra_blocks +
                                          [iterations[-1].nodes])
 
-            # Build remainder Iterations
-            remainder_trees = []
-            for n in range(len(iterations)):
-                for c in combinations([i.dim for i in iterations], n + 1):
-                    # First all inter-block Interations
-                    nodes = [b._rebuild(properties=b.properties + (REMAINDER,))
-                             for b, r in zip(inter_blocks, remainders)
-                             if r.dim not in c]
-                    # Then intra-block or remainder, for each dim (in order)
-                    properties = (REMAINDER, TAG, ELEMENTAL)
-                    for b, r in zip(intra_blocks, remainders):
-                        handle = r if b.dim in c else b
-                        nodes.append(handle._rebuild(properties=properties))
-                    nodes.extend([iterations[-1].nodes])
-                    remainder_trees.append(compose_nodes(nodes))
-
             # Will replace with blocked loop tree
-            mapper[root] = List(body=[blocked_tree] + remainder_trees)
+            mapper[root] = List(body=[blocked_tree])
 
         rebuilt = Transformer(mapper).visit(fold)
 
